@@ -2,10 +2,10 @@
 
 To install the package:
 ```
-devtools::install_github("helensepman/MS2QuantTest"
+devtools::install_github("kruvelab/MS2Quant"
                          ,ref="main"
                          ,INSTALL_opts="--no-multiarch"
-                         ,auth_token = "")
+                         ,auth_token = "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")
 ```
 
 
