@@ -5,7 +5,7 @@ To install the package:
 devtools::install_github("helensepman/MS2QuantTest"
                          ,ref="main"
                          ,INSTALL_opts="--no-multiarch"
-                         ,auth_token = "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")
+                         ,auth_token = "")
 ```
 
 
