@@ -797,8 +797,8 @@ FingerPrintTablePOS <- function(subfolder, folderwithSIRIUSfiles){
     pred_ion <- comp_name[[1]][3]
     
     filedata <- read_delim(paste(folderwithSIRIUSfiles, direct, sep = "/"), delim = " ", col_names = FALSE, show_col_types = FALSE)
-    filedata <- as.data.frame(filedata)
-    filedata <- as_tibble(t(filedata))
+    #filedata <- as.data.frame(filedata, row.names = paste0(1:dim(filedata)[1]))
+    filedata <- as.data.frame(t(filedata))
     filedata <- filedata %>%
       mutate(predion = pred_ion) %>%
       mutate(predion = as.character(sub("\\..*", "", predion))) %>%
@@ -824,8 +824,8 @@ FingerPrintTableNEG <- function(subfolder, folderwithSIRIUSfiles){
     pred_ion <- comp_name[[1]][3]
     
     filedata <- read_delim(paste(folderwithSIRIUSfiles, direct, sep = "/"), delim = " ", col_names = FALSE, show_col_types = FALSE)
-    filedata <- as.data.frame(filedata)
-    filedata <- as_tibble(t(filedata))
+    #filedata <- as.data.frame(filedata)
+    filedata <- as.data.frame(t(filedata))
     filedata <- filedata %>%
       mutate(predion = pred_ion) %>%
       mutate(predion = as.character(sub("\\..*", "", predion))) %>%
