@@ -1,4 +1,4 @@
-# MS2QuantTest
+# MS2Quant
 
 To install the package:
 ```
