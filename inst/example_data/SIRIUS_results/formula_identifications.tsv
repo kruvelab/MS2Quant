@@ -1,0 +1,2 @@
+rank	molecularFormula	adduct	precursorFormula	SiriusScore	TreeScore	IsotopeScore	numExplainedPeaks	explainedIntensity	medianMassErrorFragmentPeaks(ppm)	medianAbsoluteMassErrorFragmentPeaks(ppm)	massErrorPrecursor(ppm)	ionMass	retentionTimeInSeconds	id
+1	C10H13N5O4	[M + H]+	C10H13N5O4	24.203257616960094	21.1902019142994	3.013055702660695	8	0.8726070657059855	2.438910789540426	2.438910789540426	2.1247375444981853	268.10460	NaN	0_Unknown_5890_Unknown_5890
