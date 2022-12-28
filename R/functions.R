@@ -1051,7 +1051,7 @@ MS2Quant_quantify <- function(path_dataframe_calibrants_suspects,
   
   suspects_concentrations <- suspects_structural_FP %>%
     mutate(conc_M = area*IC/10^logRF_pred) %>%
-    select(identifier, SMILES, area, conc_M, logRF_pred, everything())
+    select(identifier, SMILES, area, retention_time, conc_M, logRF_pred)
   
   data_list <-list("calibrants_separate_plots" = plot_calgraph,
                    "logIE_logRF_calibration_plot" = calibration_plot,
