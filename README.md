@@ -4,8 +4,7 @@ To install the package:
 ```
 devtools::install_github("kruvelab/MS2Quant"
                          ,ref="main"
-                         ,INSTALL_opts="--no-multiarch"
-                         ,auth_token = "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")
+                         ,INSTALL_opts="--no-multiarch")
 ```
 
 
