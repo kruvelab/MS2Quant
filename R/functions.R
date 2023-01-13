@@ -8,7 +8,14 @@
 
 
 
-
+#' Linear regression
+#'
+#' This function calculates 
+#'
+#' @param smiles SMILES notation of the compound
+#' @return isotopic abundance coefficient
+#' @examples 
+#' 
 #' @export
 linear_regression <- function(y, x) {
   df <- tibble(x = x, #log(x),
@@ -606,10 +613,13 @@ add_mobile_phase_composition = function(data,
 
 #' Isotope distribution
 #'
-#' This function calculates isotopic abundance for a chemical based on SMILES notation.
+#' This function calculates isotopic abundance for a chemical based on SMILES notation. This number can later be used as a coefficient to multiply the area corresponding to 
+#' a monoisotopic ion. 
 #'
 #' @param smiles SMILES notation of the compound
 #' @return isotopic abundance coefficient
+#' @examples 
+#' isotopedistribution("CN1C=NC2=C1C(=O)N(C(=O)N2C)C")
 #' @export
 isotopedistribution <- function(smiles){
   #convert SMILES to chemical formula
@@ -629,6 +639,7 @@ isotopedistribution <- function(smiles){
   isotope_dist <- as.numeric(sum(isotopes$abundance))
   return(isotope_dist)
 }
+
 
 #' @export
 Smiles <- function(folder) {
@@ -688,6 +699,22 @@ Smiles <- function(folder) {
 
 #' @export
 FpTableForPredictions <- function(folderwithSIRIUSfiles){
+  
+  #uncompressing the compressed files - in case there has been any updates in SIRIUS project, good if it is done again so that compressed files are up to date
+  all_files_in_SIRIUS_folder <- list.files(path = folderwithSIRIUSfiles, full.names = TRUE, recursive = TRUE)
+  exts <- file_ext(all_files_in_SIRIUS_folder)
+  all_dirs <- tibble(dirs = all_files_in_SIRIUS_folder, 
+                     exts = exts)
+  
+  all_dirs <- all_dirs %>% 
+    filter(exts == "")
+  if (length(all_dirs$dirs) > 0) {for (zipF in all_dirs$dirs){
+    outDir <- paste(zipF, "_uncompressed",
+                    sep = "")
+    unzip(zipF, exdir = outDir)
+  }}
+  
+  # FP calc
   subfolder <- dir(folderwithSIRIUSfiles, all.files = TRUE, recursive = TRUE, pattern = ".fpt")
   subfolder_score <- dir(folderwithSIRIUSfiles, all.files = TRUE, recursive = TRUE, pattern = ".info")
   
