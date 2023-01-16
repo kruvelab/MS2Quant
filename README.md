@@ -1,5 +1,7 @@
 # MS2Quant
 
+MS2Quant package has been tested with R version 4.1.1 and with SIRIUS versions 4.9.15 to 5.6.2.
+
 To install the package:
 ```
 devtools::install_github("kruvelab/MS2Quant"
