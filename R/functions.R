@@ -930,7 +930,7 @@ MS2Quant_quantify <- function(path_dataframe_calibrants_suspects,
                               path_eluent_file,
                               organic_modifier = "MeCN",
                               pH_aq = 2.7,
-                              path_suspects_sirius_project_folder = tibble()){
+                              fingerprints = tibble()){
   
   # Read in MS2Quant model
   data_list_sirius <- readRDS(system.file("model", "model_MS2Quant_xgbTree_allData.RData", package = "MS2Quant"))
@@ -1036,9 +1036,12 @@ MS2Quant_quantify <- function(path_dataframe_calibrants_suspects,
   }
   
   ## from SIRIUS results folder
-  if (!is.null(path_suspects_sirius_project_folder)) {
+  if (!is.null(fingerprints)) {
     
-    suspects_fingerprints_SIRIUS <- FpTableForPredictions(path_suspects_sirius_project_folder)
+    if (is.character(fingerprints))
+        suspects_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
+    else
+        suspects_fingerprints_SIRIUS <- fingerprints
     
     suppressMessages(suspects_unidentified <- suspects_unidentified %>% 
       left_join(suspects_fingerprints_SIRIUS %>% 
