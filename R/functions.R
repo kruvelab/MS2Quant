@@ -10,10 +10,11 @@
 
 #' Linear regression
 #'
-#' This function calculates 
+#' This function calculates the linear regression parameters from specified x and y values. Additionally, it checks the linearity based on residuals. In case there exists a residual with absolute value higher than 10, the highest value x-y point will be removed and new linear regression is generated without it. At least 5 datapoints have to remain.
 #'
-#' @param smiles SMILES notation of the compound
-#' @return isotopic abundance coefficient
+#' @param x x-values of the data
+#' @param y y-values of the data corresponding to x-values
+#' @return linear regression parameters (slope and intercept) as a list
 #' @examples 
 #' 
 #' @export
