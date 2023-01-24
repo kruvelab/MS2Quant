@@ -15,7 +15,6 @@
 #' @param x x-values of the data
 #' @param y y-values of the data corresponding to x-values
 #' @return linear regression parameters (slope and intercept) as a list
-#' @examples 
 #' 
 #' @export
 linear_regression <- function(y, x) {

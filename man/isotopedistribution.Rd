@@ -13,7 +13,8 @@ isotopedistribution(smiles)
 isotopic abundance coefficient
 }
 \description{
-This function calculates isotopic abundance for a chemical based on SMILES notation.
+This function calculates isotopic abundance for a chemical based on SMILES notation. This number can later be used as a coefficient to multiply the area corresponding to
+a monoisotopic ion.
 }
 \examples{
 isotopedistribution("CN1C=NC2=C1C(=O)N(C(=O)N2C)C")
