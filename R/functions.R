@@ -1,12 +1,17 @@
 #' @import enviPat
 #' @import rJava
 #' @import rlist
-#' @import tidyverse
 #' @import rcdklibs
 #' @import rcdk
 #' @import xgboost
-
-
+#' @import ggplot2
+#' @import tidyr
+#' @import dplyr
+#' @import readr
+#' @import tibble
+#' @import xfun
+#' @import stringr
+NULL
 
 #' Linear regression
 #'
@@ -63,7 +68,7 @@ isotopedistribution <- function(smiles){
   formula <- formula@string
   
   # Chemical formula to isotope distribution
-  data(isotopes)
+  data(isotopes, package = "enviPat")
   pattern<-isopattern(isotopes,
                       formula,
                       threshold=0.1,
@@ -77,9 +82,6 @@ isotopedistribution <- function(smiles){
 
 #' @export
 Fingerprint_calc <- function(compoundslist){
-  library(rcdklibs)
-  library(rcdk)
-  
   compoundslist_onlySMILES <- compoundslist %>%
     select(SMILES) %>%
     unique()
@@ -628,7 +630,7 @@ isotopedistribution <- function(smiles){
   formula <- formula@string
   
   # Chemical formula to isotope distribution
-  data(isotopes)
+  data(isotopes, package = "enviPat")
   pattern<-isopattern(isotopes,
                       formula,
                       threshold=0.1,

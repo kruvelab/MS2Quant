@@ -13,12 +13,6 @@ devtools::install_github("kruvelab/MS2Quant"
 Test code using example data from the package:
 ```
 library(MS2Quant)
-library(tidyverse)
-library(xgboost)
-library(enviPat)
-library(rcdk)
-library(rlist)
-library(rcdklibs)
 
 path_dataframe_calibrants_suspects <- system.file("example_data", "quantification_example.csv", package = "MS2Quant")
 path_eluent_file <- system.file("example_data", "eluent.csv", package = "MS2Quant")
