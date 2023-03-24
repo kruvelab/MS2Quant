@@ -17,40 +17,75 @@
 #' @return linear regression parameters (slope and intercept) as a list
 #' 
 #' @export
-linear_regression <- function(y, x) {
-  df <- tibble(x = x, #log(x),
-               y = y, #log(y)
-  ) %>%
+linear_regression <- function(y, x, remove_lowest_conc = FALSE) {
+  # if multiple replicas with same concentrations - average
+  df <- tibble(x = x,
+               y = y) %>%
     group_by(x) %>%
     mutate(y = mean(y)) %>%
     ungroup() %>%
     unique() %>%
     na.omit()
+  
   y = df$y
   x = df$x
+  
+  plot_slopes_list = list()
+  
   if(length(x) == 0){
     slope = NA
     intercept = NA
     regression_parameters <- list("slope" = slope, "intercept" = intercept)
+    warning("No data for linear regression")
     return(regression_parameters)
   } else if (length(y) > 5) {
-    for (i in length(y):5){
+    #remove the lowest concentration?
+    if(remove_lowest_conc) {
       y = y[2:(length(y))]
       x = x[2:(length(x))]
-      slope = summary(lm(y ~ x))$coefficients[2]
-      intercept = summary(lm(y ~ x))$coefficients[1]
+    }
+    
+    
+    for (i in length(y):5){
+      lm_summary = summary(lm(y ~ x, weights = 1/x))
+      slope = lm_summary$coefficients[2]
+      intercept = lm_summary$coefficients[1]
       residuals = (y - (slope*x +intercept))/y*100
-      regression_parameters <- list("slope" = slope, "intercept" = intercept)
-      if (max(abs(residuals)) < 10) {
-        return(regression_parameters)
+      
+      plot_here = ggplot() +
+        geom_point(mapping = aes(x = df$x,
+                                 y = df$y)) +
+        geom_abline(slope = slope, intercept = intercept) +
+        theme_bw() +
+        labs(x = "conc_uM",
+             y = "area") 
+      plot_slopes_list[[i]] = plot_here
+      
+      if (max(abs(residuals)) < 20) {
         break
       }
+      y = y[1:(length(y)-1)]
+      x = x[1:(length(x)-1)]
     }
-    return(regression_parameters)
+    if (max(abs(residuals)) > 20) {
+      warning(paste0("Check linearity of calibration graph. Max abs relative residual: ", max(abs(residuals))))
+    }
+    
+    return(list("slope" = slope,
+                "intercept" = intercept,
+                "plots" = plot_slopes_list,
+                "resid" = residuals))
   } else {
-    slope = summary(lm(y ~ x))$coefficients[2]
-    intercept = summary(lm(y ~ x))$coefficients[1]
-    regression_parameters <- list("slope" = slope, "intercept" = intercept)
+    lm_summary = summary(lm(y ~ x))
+    slope = lm_summary$coefficients[2]
+    intercept = lm_summary$coefficients[1]
+    residuals = (y - (slope*x +intercept))/y*100
+    if (max(abs(residuals)) > 20) {
+      warning(paste0("Check linearity of calibration graph. Max abs relative residual: ", max(abs(residuals))))
+    }
+    regression_parameters <- list("slope" = slope, 
+                                  "intercept" = intercept,
+                                  "resid" = residuals)
     return(regression_parameters)
   }
 }
