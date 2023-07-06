@@ -21,7 +21,7 @@ Following steps need to be taken to use MS2Quant for quantification of detected 
 + 1.4. Run SIRIUS+CSI:FingerID
 + 1.5. Use MS2Quant to quantify
 
-![MS2Quant_github_workflow](https://github.com/kruvelab/MS2Quant/assets/48623628/6d394ec9-fe18-4542-b031-c4d1eabc76d4)
+![MS2Quant_github_workflow](https://github.com/kruvelab/MS2Quant/assets/48623628/8275bef1-a8b6-49eb-bf82-e86890cbb52f)
 **Figure 1.** MS2Quant workflow
 
 
