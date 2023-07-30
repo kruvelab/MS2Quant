@@ -89,8 +89,8 @@ and some examples can be found on [MS2Tox github page](https://github.com/kruvel
 
 ### 1.5. Use MS2Quant to quantify
 To quantify the unidentified chemicals, *MS2Quant_quantify()* function can be used. Following inputs are neede for the function:
-+ *path_dataframe_calibrants_suspects* - data table including information about calibrants and suspects subject to quantification (see Chapter 1.3.)
-+ *path_eluent_file* - path to a file containing the gradient program information (see example at [inst/example_data/eluent.csv](https://github.com/kruvelab/MS2Quant/blob/main/inst/example_data/eluent.csv))
++ *calibrants_suspects* - (path to) data table including information about calibrants and suspects subject to quantification (see Chapter 1.3.)
++ *eluent* - (path to) the gradient program information (see example at [inst/example_data/eluent.csv](https://github.com/kruvelab/MS2Quant/blob/main/inst/example_data/eluent.csv))
 + *organic_modifier* - specify which organic modifier was used (either "MeCN" or "MeOH").
 + *pH_aq* - specify the pH of the water phase.
 + *fingerprints* - specify the path to your SIRIUS calculations results folder.
