@@ -627,13 +627,15 @@ viscosity <- function(organic,organic_modifier){
 
 #' @export
 add_mobile_phase_composition = function(data,
-                                        path_eluent_file,
+                                        eluent,
                                         organic_modifier = "MeCN",
                                         pH_aq = 7.0) {
-  eluent = read_delim(path_eluent_file,
+  if (is.character(eluent)) {
+    eluent = read_delim(eluent,
                       delim = ",",
                       col_names = TRUE,
                       show_col_types = FALSE)
+  }
   
   ## Joining all collected data to one tibble, removing missing values, calculating slopes ----
   data = data %>%
@@ -963,8 +965,8 @@ SiriusScoreRank1 <- function(subfolder_score, folderwithSIRIUSfiles){
 }
 
 #' @export
-MS2Quant_quantify <- function(path_dataframe_calibrants_suspects,
-                              path_eluent_file,
+MS2Quant_quantify <- function(calibrants_suspects,
+                              eluent,
                               organic_modifier = "MeCN",
                               pH_aq = 2.7,
                               fingerprints = tibble()){
@@ -973,16 +975,18 @@ MS2Quant_quantify <- function(path_dataframe_calibrants_suspects,
   data_list_sirius <- readRDS(system.file("model", "model_MS2Quant_xgbTree_allData.RData", package = "MS2Quant"))
   MS2Quant = data_list_sirius$model
   
+  if (is.character(calibrants_suspects))
+  {
   # read in dataframe with calibrants and suspects
-  dataframe_calibrants_suspects <- read_delim(path_dataframe_calibrants_suspects,
-                                              show_col_types = FALSE)
+      calibrants_suspects <- read_delim(calibrants_suspects, show_col_types = FALSE)
+  }
   
   #############
   # CALIBRATION
   #############
   
   # 1) Find calibration compounds with concentration and area information from the dataframe
-  calibrants <- dataframe_calibrants_suspects %>% 
+  calibrants <- calibrants_suspects %>%
     drop_na(conc_M)
   
   # 2) calculcate response factors (slopes of calibration graphs)
@@ -1010,7 +1014,7 @@ MS2Quant_quantify <- function(path_dataframe_calibrants_suspects,
   
   # 2) Add eluent composition parameters 
   calibrants_structural_FP <- add_mobile_phase_composition(calibrants_structural_FP,
-                                                           path_eluent_file = path_eluent_file,
+                                                           eluent = eluent,
                                                            organic_modifier = organic_modifier,
                                                            pH_aq = pH_aq)
   
@@ -1046,7 +1050,7 @@ MS2Quant_quantify <- function(path_dataframe_calibrants_suspects,
   ##########
   
   # 1) identify the suspects - candidate structures or only area and retention time?
-  suspects <- dataframe_calibrants_suspects %>% 
+  suspects <- calibrants_suspects %>%
     filter(is.na(conc_M))
   
   suspects_with_candidate <- suspects %>% 
@@ -1100,7 +1104,7 @@ MS2Quant_quantify <- function(path_dataframe_calibrants_suspects,
   # 2) Add eluent composition parameters 
   
   suspects_structural_FP <- add_mobile_phase_composition(suspects_structural_FP,
-                                                         path_eluent_file = path_eluent_file,
+                                                         eluent = eluent,
                                                          organic_modifier = organic_modifier,
                                                          pH_aq = pH_aq)
   
