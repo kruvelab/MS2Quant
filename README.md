@@ -4,7 +4,7 @@
 from fragmentation (MS<sup>2</sup>) spectra of detected, but unidentified chemicals. 
 MS2Quant is an *xgbTree* algorithm-based regression model developed using ionization efficiency data for
 1191 unique chemicals that span 8 orders of magnitude. For more information about the data used in model training 
-the summary file under [MS2Quant/development/data](https://github.com/kruvelab/MS2Quant/tree/main/development/data).
+see the summary file under [MS2Quant/development/data](https://github.com/kruvelab/MS2Quant/tree/main/development/data).
 
 As for now, MS2Quant can predict ionization efficiencies in positive electrospray ionization mode
 for [M+H]+ and [M]+ ions, and the negative mode model is currently being developed.
