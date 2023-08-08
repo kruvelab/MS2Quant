@@ -1,10 +1,10 @@
 Package: MS2Quant
-Title: What the Package Does (One Line, Title Case)
-Version: 0.0.0.9000
+Title: Ionization efficiency prediction and quantification of unidentified chemicals
+Version: 1.1.0
 Authors@R: 
     person("Helen", "Sepman", , "helen.sepman@aces.su.se", role = c("aut", "cre"),
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: What the package does (one paragraph).
+           comment = c(ORCID = "0000-0002-8222-9962"))
+Description: MS2Quant harvests pre-trained xgbTree algorithm-based ionization efficiency prediction model. Using strucutral information (SMILES) or predicted fingerprints calculated with SIRIUS+CSI_FingerID software, ionization efficiency can be predicted. If calibrants have been measured together with suspects subject to quantification, predicted ionization efficiencies can be converted into measurement-specific response factors and concentration of unknown chemcals can be estimated.
 License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
     license
 Encoding: UTF-8

@@ -95,25 +95,6 @@ linear_regression <- function(y, x, remove_lowest_conc = FALSE) {
   }
 }
 
-#' @export
-isotopedistribution <- function(smiles){
-  #convert SMILES to chemical formula
-  molecule <- parse.smiles(smiles)[[1]]
-  formula <- get.mol2formula(molecule,charge=0)
-  formula <- formula@string
-  
-  # Chemical formula to isotope distribution
-  data(isotopes, package = "enviPat")
-  pattern<-isopattern(isotopes,
-                      formula,
-                      threshold=0.1,
-                      plotit=FALSE,
-                      charge=FALSE,
-                      algo=1)
-  isotopes <- as.data.frame(pattern[[1]])
-  isotope_dist <- as.numeric(sum(isotopes$abundance))
-  return(isotope_dist)
-}
 
 #' @export
 Fingerprint_calc <- function(compoundslist){
@@ -685,49 +666,36 @@ isotopedistribution <- function(smiles){
 
 
 #' @export
-Smiles <- function(folder) {
+summarized_SIRIUS_identification_results <- function(folder) {
   setwd(folder)
   subfolder <- dir(folder, all.files = TRUE, recursive = TRUE, pattern = "*.tsv")
-  #filename = subfolder[9]
   compiled_data <- tibble()
   
   for (filename in subfolder) {
     if (grepl("/structure_candidates", filename, fixed=TRUE)){
       
-      
-      file_name <- str_split(filename, "_")
       comp_name <- str_split(filename, "/")
-      id <- file_name[[1]][4]
-      #fp_data <- file_name[[1]][4]
-      folder_number <- file_name[[1]][1]
-      #comp_formula <- comp_name[[1]][3]
+      folder_name = comp_name[[1]][1]
       
+      folder_number <- as.numeric(str_split(folder_name, "_")[[1]][1])
+      id <- as.character(tail(str_split(folder_name, "_")[[1]], n=1)) # id is taken as the last element of the folder name after splitting the string by underscores
       
       data_smile <- read_delim(filename, delim = "\t") 
       
-      if (length(data_smile$rank) != 0) {
+      if (dim(data_smile)[1] > 0) {
         data_smile_notempty <- data_smile %>%
           select(rank, formulaRank, molecularFormula, `CSI:FingerIDScore`, adduct, InChI, smiles) %>% 
-          mutate(id = id) %>%
-          mutate(folder_number = folder_number) %>%
+          mutate(id = id,
+                 folder_number = folder_number) %>%
           rename(rank_withinFormula = rank,
-                 siriusscore = `CSI:FingerIDScore`) %>%
+                 siriusscore = `CSI:FingerIDScore`,
+                 SMILES = smiles) %>%
           select(id, folder_number, everything())
+        
+        compiled_data <- compiled_data %>%
+          bind_rows(data_smile_notempty) %>%
+          unique()
       }
-      
-      names(data_smile_notempty)[names(data_smile_notempty) == "smiles"] <- "SMILES"
-      
-      # data_smile_filter <- data_smile_notempty %>%
-      #   filter(`CSI:FingerIDScore` == min(data_smile_notempty$`CSI:FingerIDScore`))
-      
-      # data_smile_notempty <- data_smile_notempty %>%
-      #   filter(formulaRank == data_smile_filter$formulaRank )
-      
-      #names(data_smile_notempty)[names(data_smile_notempty) == "inchikey2D"] <- "InChIKey"
-      
-      compiled_data <- compiled_data %>%
-        bind_rows(data_smile_notempty) %>%
-        unique()
     }
   }
   compiled_data <- compiled_data %>%
@@ -740,7 +708,9 @@ Smiles <- function(folder) {
   return(compiled_data)
 }
 
-#' @export
+
+
+
 FpTableForPredictions <- function(folderwithSIRIUSfiles){
   
   #uncompressing the compressed files - in case there has been any updates in SIRIUS project, good if it is done again so that compressed files are up to date
@@ -761,14 +731,13 @@ FpTableForPredictions <- function(folderwithSIRIUSfiles){
   subfolder <- dir(folderwithSIRIUSfiles, all.files = TRUE, recursive = TRUE, pattern = ".fpt")
   subfolder_score <- dir(folderwithSIRIUSfiles, all.files = TRUE, recursive = TRUE, pattern = ".info")
   
+  # find common fingerprints of pos and neg mode
   fp_names_pos <- paste("Un", read_delim(paste(folderwithSIRIUSfiles,"/csi_fingerid.tsv", sep = ""), delim = "\t", show_col_types = FALSE)$absoluteIndex, sep = "")
   fp_names_neg <- paste("Un", read_delim(paste(folderwithSIRIUSfiles,"/csi_fingerid_neg.tsv", sep = "" ), delim = "\t", show_col_types = FALSE)$absoluteIndex, sep = "")
-  suppressMessages(fp_names_common <- as.data.frame(fp_names_pos)  %>%
-    mutate(fp_names_neg = fp_names_pos) %>%
-    inner_join(as.data.frame(fp_names_neg)))
-  fp_names_common <- as.vector(fp_names_common$fp_names_pos)
+  fp_names_common = intersect(fp_names_pos, fp_names_neg)
   
-  selected_rank1_table <- FingerPrintTable(subfolder, fp_names_pos, fp_names_neg, fp_names_common, folderwithSIRIUSfiles) %>% #fp_all
+  
+  selected_rank1_table <- FingerPrintTable(subfolder, fp_names_pos, fp_names_neg, fp_names_common, folderwithSIRIUSfiles) %>% 
     inner_join(SiriusScoreRank1(subfolder_score, folderwithSIRIUSfiles), by = c("id", "foldernumber", "predion"))
   
   final_table_mass <- selected_rank1_table %>%
@@ -802,164 +771,97 @@ FingerPrintTable <- function(subfolder, fp_names_pos, fp_names_neg, fp_names_com
         list.append(subfold)
     }
   }
-  
-  fp_pos <- FingerPrintTablePOS(subfolder_pos, folderwithSIRIUSfiles)
-  
-  if(nrow(fp_pos) != 0){
-    colnames(fp_pos) <- c(fp_names_pos, "predion", "id", "foldernumber", "predform")
+  # read in predicted FPs for pos and neg mode
+  if(!is.null(subfolder_pos)) {
+    fp_all <- read_in_fingerprints(subfolder_pos, folderwithSIRIUSfiles, fp_names_pos, fp_names_common)
   }
   
-  fp_neg <- FingerPrintTableNEG(subfolder_neg, folderwithSIRIUSfiles)
-  
-  if(nrow(fp_neg) != 0){
-    colnames(fp_neg) <- c(fp_names_neg, "predion", "id", "foldernumber", "predform")
-  }
-  
-  if (!is.null(subfolder_neg) & !is.null(subfolder_pos)){
-    
-    fp_all <- fp_pos %>%
-      select(id, foldernumber, predform, predion, all_of(fp_names_common)) %>%
-      mutate(id = as.numeric(id),
-             foldernumber = as.numeric(foldernumber),
-             predform = as.character(predform),
-             predion = as.character(predion)) %>%
-      bind_rows(fp_neg %>% 
-                  select(id, foldernumber, predform, predion, all_of(fp_names_common)) %>%
-                  mutate(id = as.numeric(id),
-                         foldernumber = as.numeric(foldernumber),
-                         predform = as.character(predform),
-                         predion = as.character(predion))) %>%
-      unique()
-  }
-  
-  
-  if (is.null(subfolder_neg) & !is.null(subfolder_pos)){
-    
-    fp_all <- fp_pos %>%
-      select(id, foldernumber, predform, predion, all_of(fp_names_common)) %>%
-      unique()
-  }
-  
-  if (!is.null(subfolder_neg) & is.null(subfolder_pos)){
-    
-    fp_all <- fp_neg %>%
-      select(id, foldernumber, predform, predion, all_of(fp_names_common)) %>%
-      unique()
-  }
-  
-  if (is.null(subfolder_neg) & is.null(subfolder_pos)){
-    print("NO data found in subfolders")
+  if(!is.null(subfolder_neg)) {
+    fp_neg <- read_in_fingerprints(subfolder_neg, folderwithSIRIUSfiles, fp_names_neg, fp_names_common)
+    if(dim(fp_all)[1] > 0) {
+      fp_all <- fp_all %>% 
+        bind_rows(fp_neg)
+    } else {
+      fp_all <- fp_neg
+    }
   }
   
   return(fp_all)
 }
 
 #' @export
-FingerPrintTablePOS <- function(subfolder, folderwithSIRIUSfiles){
+read_in_fingerprints <- function(subfolder, folderwithSIRIUSfiles, names_all_columns, names_common){
   fingerprint_data <- tibble()
   for(direct in subfolder){
-    # subfolder with data must be on a form where id is on second place after nr_ (0_Einc270001_Einc270001)
-    file_name <- str_split(direct, "_")
     comp_name <- str_split(direct, "/")
+    folder_name = comp_name[[1]][1]
     
-    sir_fold <- as.numeric(file_name[[1]][1])
-    id_this <- as.numeric(file_name[[1]][3]) # if id in some other position, this can be changed
-    pred_ion <- comp_name[[1]][3]
+    sir_fold <- as.numeric(str_split(folder_name, "_")[[1]][1])
+    id_this <- as.character(tail(str_split(folder_name, "_")[[1]], n=1)) # id is taken as the last element of the folder name after splitting the string by underscores
+    pred_ion <- as.character(sub("\\..*", "", comp_name[[1]][3])) 
     
     filedata <- read_delim(paste(folderwithSIRIUSfiles, direct, sep = "/"), delim = " ", col_names = FALSE, show_col_types = FALSE)
     filedata <- as.data.frame(t(filedata))
     filedata <- filedata %>%
-      mutate(predion = pred_ion) %>%
-      mutate(predion = as.character(sub("\\..*", "", predion))) %>%
-      mutate(id = id_this) %>%
-      mutate(sir_fol_nr = sir_fold) %>%
-      mutate(predform = as.character(sub("\\_.*", "", predion)))
+      mutate(predion = pred_ion,
+             id = id_this,
+             sir_fol_nr = sir_fold,
+             predform = as.character(sub("\\_.*", "", predion)))
     fingerprint_data <- fingerprint_data %>%
       bind_rows(filedata)
   }
-  return(fingerprint_data)
-}
-
-#' @export
-FingerPrintTableNEG <- function(subfolder, folderwithSIRIUSfiles){
-  fingerprint_data <- tibble()
-  for(direct in subfolder){
-    # subfolder with data must be on a form where id is on second place after nr_ (0_Einc270001_Einc270001)
-    file_name <- str_split(direct, "_")
-    comp_name <- str_split(direct, "/")
-    
-    sir_fold <- as.numeric(file_name[[1]][1])
-    id_this <- as.numeric(file_name[[1]][3])
-    pred_ion <- comp_name[[1]][3]
-    
-    filedata <- read_delim(paste(folderwithSIRIUSfiles, direct, sep = "/"), delim = " ", col_names = FALSE, show_col_types = FALSE)
-    filedata <- as.data.frame(t(filedata))
-    filedata <- filedata %>%
-      mutate(predion = pred_ion) %>%
-      mutate(predion = as.character(sub("\\..*", "", predion))) %>%
-      mutate(id = id_this) %>%
-      mutate(sir_fol_nr = sir_fold) %>%
-      mutate(predform = as.character(sub("\\_.*", "", predion)))
-    fingerprint_data <- fingerprint_data %>%
-      bind_rows(filedata)
-    
+  
+  if(nrow(fingerprint_data) != 0){
+    colnames(fingerprint_data) <- c(names_all_columns, "predion", "id", "foldernumber", "predform")
+    fingerprint_data = fingerprint_data %>% 
+      select(id, foldernumber, predform, predion, all_of(names_common))
   }
+  
   return(fingerprint_data)
 }
 
 #' @export
 SiriusScoreRank1 <- function(subfolder_score, folderwithSIRIUSfiles){
   scores_table <- tibble()
-  scores_table <- scores_table %>%
-    mutate(id = "id") %>%
-    mutate(foldernumber = "sirfolnr") %>%
-    mutate(siriusscore = "siriusscore") %>%
-    mutate(id = as.numeric(id),
-           foldernumber = as.numeric(foldernumber),
-           siriusscore = as.numeric(siriusscore))
   
   for (filename in subfolder_score) {
     if (grepl("/scores", filename, fixed=TRUE)){
       
-      file_name_score <- str_split(filename, "_")
-      comp_name_score <- str_split(filename, "/")
+      comp_name <- str_split(filename, "/")
+      folder_name = comp_name[[1]][1]
       
-      foldernumber <- as.numeric(file_name_score[[1]][1])
-      id <- as.numeric(file_name_score[[1]][3]) #if id is not in second place, [2] must be changed
-      pred_st <- comp_name_score[[1]][3]
+      foldernumber <- as.numeric(str_split(folder_name, "_")[[1]][1])
+      id <- as.character(tail(str_split(folder_name, "_")[[1]], n=1)) # id is taken as the last element of the folder name after splitting the string by underscores
+      predion <- as.character(sub("\\..*", "", comp_name[[1]][3])) 
       
-      fileConnection <- file(paste(folderwithSIRIUSfiles, filename, sep = "/"))
-      record <- readLines(fileConnection)
-      close(fileConnection)
+      data_here = read_delim(paste(folderwithSIRIUSfiles, filename, sep = "/"), delim = "\t", col_names = F)
+      SiriusScore <- data_here %>% 
+        filter(X1 == "sirius.scores.SiriusScore")
       
-      SiriusScore <- substring(grep('sirius.scores.SiriusScore', record, value = TRUE, fixed = TRUE),27)
+      filedata <- tibble(id , foldernumber, predion) %>%
+        mutate(siriusscore = as.numeric(SiriusScore$X2))
       
-      filedata <- data.frame(id , foldernumber)
-      
-      filedata <- filedata %>%
-        mutate(predion = pred_st) %>%
-        mutate(predion = sub("\\..*", "", predion)) %>%
-        mutate(siriusscore = as.numeric(SiriusScore))
-      
-      scores_table <- scores_table%>%
-        bind_rows(filedata)
+      if(dim(scores_table)[1] > 0) {
+        scores_table <- scores_table%>%
+          bind_rows(filedata)
+      } else {
+        scores_table = filedata
+      }
     }
   }
-  data_scores <- scores_table %>%
-    unique() %>%
-    select(-predion) %>% #if two compound have same siriusscore they get same rank
+  scores_table = scores_table %>% 
+    filter(grepl("[M+H]+", predion, fixed = TRUE) | grepl("[M]+", predion, fixed = TRUE)) %>% 
     mutate(siriusscore = as.numeric(siriusscore)) %>%
-    mutate(siriusscore = round(siriusscore, 10)) %>%
-    unique() %>%
+    mutate(siriusscore = round(siriusscore, 10)) %>% 
+    unique()
+  
+  data_scores <- scores_table %>%
+    select(-predion) %>% #if two compound have same siriusscore they get same rank
     group_by(id, foldernumber) %>%
     arrange(desc(siriusscore)) %>%
     mutate(rank = row_number()) %>%
     ungroup() %>%
-    left_join(scores_table %>% 
-                unique() %>%  
-                mutate(siriusscore = as.numeric(siriusscore)) %>% 
-                mutate(siriusscore = round(siriusscore, 10)) %>%
-                unique(), 
+    left_join(scores_table, 
               by = c("id", "foldernumber", "siriusscore")) %>%
     filter(rank == 1) %>%
     select(-rank) %>%
@@ -967,6 +869,7 @@ SiriusScoreRank1 <- function(subfolder_score, folderwithSIRIUSfiles){
   
   return(data_scores)
 }
+
 
 #' @export
 MS2Quant_quantify <- function(calibrants_suspects,
@@ -985,9 +888,9 @@ MS2Quant_quantify <- function(calibrants_suspects,
       calibrants_suspects <- read_delim(calibrants_suspects, show_col_types = FALSE)
   }
   
-  #############
+  #************
   # CALIBRATION
-  #############
+  #************
   
   # 1) Find calibration compounds with concentration and area information from the dataframe
   calibrants <- calibrants_suspects %>%
@@ -1049,9 +952,9 @@ MS2Quant_quantify <- function(calibrants_suspects,
   linmod_calibration_summary <- summary(linmod_calibration)
   
   
-  ##########
+  #************
   # SUSPECTS
-  ##########
+  #************
   
   # 1) identify the suspects - candidate structures or only area and retention time?
   suspects <- calibrants_suspects %>%

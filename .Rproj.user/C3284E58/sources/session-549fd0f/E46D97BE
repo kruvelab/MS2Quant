@@ -1,0 +1,28 @@
+{
+    "id": "E46D97BE",
+    "path": null,
+    "project_path": null,
+    "type": "object_explorer",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1691510589314.0,
+    "source_on_save": false,
+    "relative_order": 2,
+    "properties": {
+        "id": "e8b37652058d413bb69423e9254cf1d7",
+        "name": "IE_pred",
+        "title": "IE_pred",
+        "language": "R",
+        "source_window_id": "",
+        "Source": "Source"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1655734868504,
+    "encoding": "",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1691510589314,
+    "read_only": false,
+    "read_only_alternatives": []
+}
