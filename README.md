@@ -79,11 +79,13 @@ The example data table can be found at [inst/example_data/quantification_example
 
 ### 1.4. Run SIRIUS+CSI:FingerID
 SIRIUS calculations can be run either using graphical user interface or command line interface.
-Information obtained from SIRIUS predictions will be joined to the unidentified chemicals information based on the identifier. 
-that means that the identifier provided in the table for unidentified LC/MS features needs to align with identifier found in SIRIUS folder name, see Figure 2.
+Information obtained from SIRIUS predictions will be joined to the unidentified chemicals information based on the **identifier**. 
+That means that the identifier provided in the table for unidentified LC/MS features needs to align with identifier found in SIRIUS folder name, see Figure 2.
 
-![MS2Quant_github_sirius](https://github.com/kruvelab/MS2Quant/assets/48623628/7c9cb5fc-eab4-4800-b4c8-b062b42f0cff)
+![MS2Quant_github_sirius](https://github.com/kruvelab/MS2Quant/assets/48623628/de89d2c6-dbad-4d21-8ba9-4d43a646209b)
 **Figure 2.** *identifier* of unidentified suspect will be used to join predicted fingerprints from SIRIUS calculations.
+
+**NB!** Do not use underscores (_) in your identifier column in the table for unidentified LC/MS features!
 
 Longer explanation on how to use SIRIUS for predictions can be found from [Official online documentation for the SIRIUS MS/MS software github page](https://boecker-lab.github.io/docs.sirius.github.io/)
 and some examples can be found on [MS2Tox github page](https://github.com/kruvelab/MS2Tox/tree/main#fingerprint-calculation-with-siriuscsifingerid).
