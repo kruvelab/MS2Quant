@@ -630,17 +630,21 @@ add_mobile_phase_composition = function(data,
                                         eluent,
                                         organic_modifier = "MeCN",
                                         pH_aq = 7.0) {
-  if (is.character(eluent)) {
+  
+  if("retention_time" %in% colnames(data) == T) {
+    if (is.character(eluent)) {
     eluent = read_delim(eluent,
                       delim = ",",
                       col_names = TRUE,
                       show_col_types = FALSE)
+    }
+    
+    data = data %>%
+      mutate(organic_modifier_percentage = organicpercentage(eluent, retention_time))
   }
   
-  ## Joining all collected data to one tibble, removing missing values, calculating slopes ----
   data = data %>%
-    mutate(organic_modifier_percentage = organicpercentage(eluent, retention_time),
-           viscosity = viscosity(organic_modifier_percentage, organic_modifier),
+    mutate(viscosity = viscosity(organic_modifier_percentage, organic_modifier),
            surface_tension = surfacetension(organic_modifier_percentage, organic_modifier),
            polarity_index = polarityindex(organic_modifier_percentage, organic_modifier), 
            organic_modifier = organic_modifier,
@@ -969,7 +973,7 @@ MS2Quant_quantify <- function(calibrants_suspects,
                               eluent,
                               organic_modifier = "MeCN",
                               pH_aq = 2.7,
-                              fingerprints = tibble()){
+                              fingerprints = ""){
   
   # Read in MS2Quant model
   data_list_sirius <- readRDS(system.file("model", "model_MS2Quant_xgbTree_allData.RData", package = "MS2Quant"))
@@ -1077,7 +1081,7 @@ MS2Quant_quantify <- function(calibrants_suspects,
   }
   
   ## from SIRIUS results folder
-  if (!is.null(fingerprints)) {
+  if (fingerprints != "") {
     
     if (is.character(fingerprints))
         suspects_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
@@ -1133,3 +1137,94 @@ MS2Quant_quantify <- function(calibrants_suspects,
   return(data_list)
 }
 
+#' @export
+MS2Quant_predict_IE <- function(chemicals_for_IE_prediction,
+                                eluent = "",
+                                organic_modifier = "MeCN",
+                                organic_percentage = 80,
+                                pH_aq = 2.7,
+                                fingerprints = ""){
+  
+  # Read in MS2Quant model
+  data_list_sirius <- readRDS(system.file("model", "model_MS2Quant_xgbTree_allData.RData", package = "MS2Quant"))
+  MS2Quant = data_list_sirius$model
+  
+  if (is.character(chemicals_for_IE_prediction))
+  {
+    # read in dataframe with chemicals
+    chemicals_for_IE_prediction <- read_delim(chemicals_for_IE_prediction, show_col_types = FALSE)
+  }
+  
+  #check if has retention time
+  if("retention_time" %in% colnames(chemicals_for_IE_prediction) == F) {
+    chemicals_for_IE_prediction = chemicals_for_IE_prediction %>% 
+      mutate(organic_modifier_percentage = organic_percentage)
+  }
+  
+  
+  # 1) identify the chemicals with and without SMILES
+  
+  chemicals_with_SMILES <- chemicals_for_IE_prediction %>% 
+    drop_na(SMILES)
+  
+  chemicals_unidentified <- chemicals_for_IE_prediction %>% 
+    filter(is.na(SMILES))
+  
+  # 1) Get fingerprints for chemicals
+  
+  chemicals_structural_FP = tibble()
+  
+  ## from structure
+  if (dim(chemicals_with_SMILES)[1] > 0) {
+    chemicals_with_SMILES <- Fingerprint_calc(chemicals_with_SMILES)
+    
+    chemicals_with_SMILES <- chemicals_with_SMILES %>%
+      group_by(SMILES) %>%
+      mutate(IC = isotopedistribution(SMILES)/100) %>%
+      ungroup()
+    
+    chemicals_structural_FP <- chemicals_with_SMILES
+    
+  }
+  
+  ## from SIRIUS results folder
+  if (fingerprints != "") {
+    
+    if (is.character(fingerprints))
+      chemicals_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
+    else
+      chemicals_fingerprints_SIRIUS <- fingerprints
+    
+    suppressMessages(chemicals_unidentified <- chemicals_unidentified %>% 
+                       left_join(chemicals_fingerprints_SIRIUS %>% 
+                                   filter(grepl("[M+H]+", predion, fixed = TRUE) | grepl("[M]+", predion, fixed = TRUE)) %>%
+                                   rename(identifier = id) %>% 
+                                   mutate(identifier = as.character(identifier))))
+    
+    if(dim(chemicals_structural_FP)[1] > 0) {
+      chemicals_structural_FP <- chemicals_structural_FP %>% 
+        bind_rows(chemicals_unidentified)
+    } else {
+      chemicals_structural_FP <- chemicals_unidentified
+    }
+  }
+  
+  # 2) Add eluent composition parameters 
+  
+  chemicals_predicted_IEs <- add_mobile_phase_composition(chemicals_structural_FP,
+                                                          eluent = eluent,
+                                                          organic_modifier = organic_modifier,
+                                                          pH_aq = pH_aq)
+  
+  # 3) Predict logIE values with MS2Quant for all chemicals
+  
+  chemicals_predicted_IEs <- chemicals_predicted_IEs %>%
+    mutate(pred_logIE = predict(MS2Quant, newdata = chemicals_predicted_IEs)) %>% 
+    select(colnames(chemicals_for_IE_prediction), pred_logIE)
+  
+  
+  data_list <-list("chemicals_predicted_IEs" = chemicals_predicted_IEs,
+                   "date" = Sys.Date())
+  
+  return(data_list)
+}
