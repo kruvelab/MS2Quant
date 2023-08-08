@@ -8,8 +8,9 @@ see the summary file under [MS2Quant/development/data](https://github.com/kruvel
 
 As for now, MS2Quant can predict ionization efficiencies in positive electrospray ionization mode
 for [M+H]+ and [M]+ ions, and the negative mode model is currently being developed.
-MS2Quant package has been tested with R version 4.1.1 and with SIRIUS versions 4.9.15 to 5.6.2.
+MS2Quant package has been tested with R version 4.1.1 and 4.2.2, as well as with SIRIUS versions 4.9.15 to 5.6.2.
 
+For more information about development and validation of MS2Quant, please see the [paper](https://doi.org/10.1021/acs.analchem.3c01744).
 
 ## 1. Using MS2Quant to quantify unknown substances
 
@@ -18,7 +19,7 @@ Following steps need to be taken to use MS2Quant for quantification of detected 
 + 1.1. Install the MS2Quant R-package
 + 1.2. Measure a set of calibrants together with the sample
 + 1.3. Organize the input information into a table
-+ 1.4. Run SIRIUS+CSI:FingerID
++ 1.4. Run SIRIUS+CSI:FingerID calculations
 + 1.5. Use MS2Quant to quantify
 
 ![MS2Quant_github_workflow](https://github.com/kruvelab/MS2Quant/assets/48623628/1d32b3bc-8cd0-4ecf-99c1-d2630f6f5af6)
@@ -111,7 +112,32 @@ quantification based on structure will be prioritized.
 
 ## 3. Using MS2Quant to predict ionization efficiency (without quantification) 
 
-(will be added soon)
+Quantification cannot be performed if calibration chemicals have not been run together with the suspects. Still, ionization efficiency can be predicted for any chemical either based on structure (SMILES) or
+predicted fingerprints.
+
+In order to predict ionization efficiency values to different chemicals under the same eluent conditions, following code can be run:
+```
+chemicals_SMILES = tibble(SMILES = c("CN1C=NC2=C1C(=O)N(C(=O)N2C)C", 
+                                     "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O"))
+
+IE_pred = MS2Quant_predict_IE(chemicals_SMILES)
+data = IE_pred$chemicals_predicted_IEs
+```
+By default, 80/20 MeCN/H2O with aqueous pH of 2.7 is used. Alternative eluent compositions can be specified as function input: 
+```
+IE_pred = MS2Quant_predict_IE(chemicals_for_IE_prediction = chemicals_SMILES,
+                              organic_modifier = "MeOH",
+                              organic_percentage = 50,
+                              pH_aq = 7)
+```
+Ionization efficiency can also be predicted for unidentified chemicals. In this case, similarly to *MS2Quant_quantify()* function, data table with an identifier and retention time needs to be provided together
+with the eluent file and SIRIUS calculations results folder:
+```
+IE_pred = MS2Quant_predict_IE(chemicals_for_IE_prediction = chemicals_SMILES,
+                              eluent = path_eluent_file,
+                              fingerprints = path_suspects_sirius_project_folder)
+```
+If retention time is missing from the data table, default eluent conditions will be used. 
 
 ## 4. Test code using example data from the package
 
