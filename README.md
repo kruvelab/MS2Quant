@@ -30,7 +30,7 @@ Following steps need to be taken to use MS2Quant for quantification of detected 
 To install the package, run the following command in R:
 
 ```
-devtools::install_github("helensepman/MS2QuantTest",
+devtools::install_github("kruvelab/MS2Quant",
                          ref="main",
                          INSTALL_opts="--no-multiarch")
 ```
