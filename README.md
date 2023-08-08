@@ -12,7 +12,7 @@ MS2Quant package has been tested with R version 4.1.1 and 4.2.2, as well as with
 
 For more information about development and validation of MS2Quant, please see the [paper](https://doi.org/10.1021/acs.analchem.3c01744).
 
-## 1. Using MS2Quant to quantify unknown substances
+## 1. Using MS2Quant to quantify unidentified substances
 
 Following steps need to be taken to use MS2Quant for quantification of detected unknown chemicals:
 
