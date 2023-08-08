@@ -136,7 +136,7 @@ IE_pred = MS2Quant_predict_IE(chemicals_for_IE_prediction = chemicals_SMILES,
 Ionization efficiency can also be predicted for unidentified chemicals. In this case, similarly to *MS2Quant_quantify()* function, data table with an identifier and retention time needs to be provided together
 with the eluent file and SIRIUS calculations results folder:
 ```
-IE_pred = MS2Quant_predict_IE(chemicals_for_IE_prediction = chemicals_SMILES,
+IE_pred = MS2Quant_predict_IE(chemicals_for_IE_prediction = path_dataframe_calibrants_suspects,
                               eluent = path_eluent_file,
                               fingerprints = path_suspects_sirius_project_folder)
 ```
