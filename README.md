@@ -82,7 +82,7 @@ SIRIUS calculations can be run either using graphical user interface or command 
 Information obtained from SIRIUS predictions will be joined to the unidentified chemicals information based on the **identifier**. 
 That means that the identifier provided in the table for unidentified LC/MS features needs to align with identifier found in SIRIUS folder name, see Figure 2.
 
-**NB!** Do not use underscores (_) in your identifier column in the table for unidentified LC/MS features!
+**NB! Do not use underscores (_) in your identifier!**
 
 ![MS2Quant_github_sirius](https://github.com/kruvelab/MS2Quant/assets/48623628/89874378-64bc-499e-aa32-43c9f69447b1)
 **Figure 2.** *identifier* of unidentified suspect will be used to join predicted fingerprints from SIRIUS calculations.
