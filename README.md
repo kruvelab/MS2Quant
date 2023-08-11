@@ -138,7 +138,9 @@ with the eluent file and SIRIUS calculations results folder:
 ```
 IE_pred = MS2Quant_predict_IE(chemicals_for_IE_prediction = path_dataframe_calibrants_suspects,
                               eluent = path_eluent_file,
-                              fingerprints = path_suspects_sirius_project_folder)
+                              fingerprints = path_suspects_sirius_project_folder,
+                              organic_modifier = "MeOH",
+                              pH_aq = 7)
 ```
 If retention time is missing from the data table, default eluent conditions will be used. 
 
