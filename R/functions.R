@@ -20,7 +20,7 @@ NULL
 #' @param x x-values of the data
 #' @param y y-values of the data corresponding to x-values
 #' @return linear regression parameters (slope and intercept) as a list
-#' 
+#'
 #' @export
 linear_regression <- function(y, x, remove_lowest_conc = FALSE) {
   # if multiple replicas with same concentrations - average
@@ -31,12 +31,12 @@ linear_regression <- function(y, x, remove_lowest_conc = FALSE) {
     ungroup() %>%
     unique() %>%
     na.omit()
-  
+
   y = df$y
   x = df$x
-  
+
   plot_slopes_list = list()
-  
+
   if(length(x) == 0){
     slope = NA
     intercept = NA
@@ -49,23 +49,23 @@ linear_regression <- function(y, x, remove_lowest_conc = FALSE) {
       y = y[2:(length(y))]
       x = x[2:(length(x))]
     }
-    
-    
+
+
     for (i in length(y):5){
       lm_summary = summary(lm(y ~ x, weights = 1/x))
       slope = lm_summary$coefficients[2]
       intercept = lm_summary$coefficients[1]
       residuals = (y - (slope*x +intercept))/y*100
-      
+
       plot_here = ggplot() +
         geom_point(mapping = aes(x = df$x,
                                  y = df$y)) +
         geom_abline(slope = slope, intercept = intercept) +
         theme_bw() +
         labs(x = "conc_uM",
-             y = "area") 
+             y = "area")
       plot_slopes_list[[i]] = plot_here
-      
+
       if (max(abs(residuals)) < 20) {
         break
       }
@@ -75,7 +75,7 @@ linear_regression <- function(y, x, remove_lowest_conc = FALSE) {
     if (max(abs(residuals)) > 20) {
       warning(paste0("Check linearity of calibration graph. Max abs relative residual: ", max(abs(residuals))))
     }
-    
+
     return(list("slope" = slope,
                 "intercept" = intercept,
                 "plots" = plot_slopes_list,
@@ -88,7 +88,7 @@ linear_regression <- function(y, x, remove_lowest_conc = FALSE) {
     if (max(abs(residuals)) > 20) {
       warning(paste0("Check linearity of calibration graph. Max abs relative residual: ", max(abs(residuals))))
     }
-    regression_parameters <- list("slope" = slope, 
+    regression_parameters <- list("slope" = slope,
                                   "intercept" = intercept,
                                   "resid" = residuals)
     return(regression_parameters)
@@ -101,48 +101,48 @@ Fingerprint_calc <- function(compoundslist){
   compoundslist_onlySMILES <- compoundslist %>%
     select(SMILES) %>%
     unique()
-  
+
   # substructure fingerprints
   row <- c(1:307)
   list <- as.data.frame(row)
-  
+
   col_names_substr <- paste("Un", c(55:361), sep = "")
-  
+
   substr_table <- as.data.frame(t(list)) %>%
     rownames_to_column()
-  
+
   error_comp <- tibble()
-  
+
   for (n in 1:length(compoundslist_onlySMILES$SMILES)){
     #col <- compoundslist$id[[n]]
     SMILES <- compoundslist_onlySMILES$SMILES[[n]]
-    
+
     mol2 <- parse.smiles(SMILES)[[1]]
-    
+
     if(!is.null(mol2)){
-      
+
       substr_fingerprints <- get.fingerprint(mol2,
                                              type = "substructure")
-      
+
       table <- as.data.frame(substr_fingerprints@bits) %>%
         mutate(fp = 1) %>%
         mutate(fp = as.numeric(fp))
       colnames(table) <- c("row", SMILES)
-      
+
       table <- table %>%
         mutate(row = as.numeric(row))
-      
+
       suppressMessages(datarow <- list %>%
         left_join(table) %>%
         select(-row))
-      
+
       newrow <- as.data.frame(t(datarow)) %>%
         rownames_to_column()
-      
+
       substr_table <- substr_table %>%
         add_row(newrow)
     }
-    
+
     else{
       wrong_smile <- as.data.frame(SMILES)
       error_comp <- error_comp %>%
@@ -150,178 +150,178 @@ Fingerprint_calc <- function(compoundslist){
       print(SMILES)
     }
   }
-  
+
   substr_table[is.na(substr_table)] <- 0
-  
+
   substr_table <- substr_table %>%
     filter(rowname != "row")
-  
+
   names(substr_table) <- c("SMILES", col_names_substr)
-  
+
   #MACCS fingerprints
   row <- c(1:166)
-  
+
   list <- as.data.frame(row)
-  
+
   col_names_maccs <- paste("Un", c(362:527), sep = "")
-  
+
   maccs_table <- as.data.frame(t(list)) %>%
     rownames_to_column()
-  
+
   for (n in 1:length(compoundslist_onlySMILES$SMILES)){
     #col <- compoundslist$id[[n]]
     SMILES <- compoundslist_onlySMILES$SMILES[[n]]
-    
+
     mol2 <- parse.smiles(SMILES)[[1]]
-    
+
     if(!is.null(mol2)){
-      
+
       maccs_fingerprints <- get.fingerprint(mol2,
                                             type = "maccs")
-      
+
       table <- as.data.frame(maccs_fingerprints@bits) %>%
         mutate(fp = 1) %>%
         mutate(fp = as.numeric(fp))
       colnames(table) <- c("row", SMILES)
-      
+
       table <- table %>%
         mutate(row = as.numeric(row))
-      
+
       suppressMessages(datarow <- list %>%
         left_join(table) %>%
         select(-row))
-      
+
       newrow <- as.data.frame(t(datarow)) %>%
         rownames_to_column()
-      
+
       maccs_table <- maccs_table %>%
         add_row(newrow)
     }
-    
+
     else{
       print(SMILES)
     }
   }
-  
+
   maccs_table[is.na(maccs_table)] <- 0
-  
+
   maccs_table <- maccs_table %>%
     filter(rowname != "row")
-  
+
   names(maccs_table) <- c("SMILES", col_names_maccs)
-  
-  
+
+
   #pubchem fingerprints
-  row <- c(1:881) 
-  
+  row <- c(1:881)
+
   list <- as.data.frame(row)
-  
+
   col_names_pubchem <- paste("Un", c(528:1408), sep = "")
-  
+
   pubchem_table <- as.data.frame(t(list)) %>%
     rownames_to_column()
-  
+
   for (n in 1:length(compoundslist_onlySMILES$SMILES)){
     #col <- compoundslist$id[[n]]
     SMILES <- compoundslist_onlySMILES$SMILES[[n]]
-    
+
     mol2 <- parse.smiles(SMILES)[[1]]
-    
+
     if(!is.null(mol2)){
-      
+
       pubchem_fingerprints <- get.fingerprint(mol2,
                                               type = "pubchem")
-      
+
       table <- as.data.frame(pubchem_fingerprints@bits) %>%
         mutate(fp = 1) %>%
         mutate(fp = as.numeric(fp))
       colnames(table) <- c("row", SMILES)
-      
+
       table <- table %>%
         mutate(row = as.numeric(row))
-      
+
       suppressMessages(datarow <- list %>%
         left_join(table) %>%
         select(-row))
-      
+
       newrow <- as.data.frame(t(datarow)) %>%
         rownames_to_column()
-      
+
       pubchem_table <- pubchem_table %>%
         add_row(newrow)
     }
-    
+
     else{
       print(SMILES)
     }
   }
-  
+
   pubchem_table[is.na(pubchem_table)] <- 0
-  
+
   pubchem_table <- pubchem_table %>%
     filter(rowname != "row")
-  
+
   names(pubchem_table) <- c("SMILES", col_names_pubchem)
-  
+
   #KlekRoth fingerprints
-  
+
   row <- c(as.numeric(1:4860))
-  
+
   list <- as.data.frame(row)
-  
+
   col_names_KlekotaRoth <- paste("Un", c(1409:6268), sep = "")
-  
-  
+
+
   KlekotaRoth_table <- as.data.frame(t(list)) %>%
     rownames_to_column()
-  
+
   for (n in 1:length(compoundslist_onlySMILES$SMILES)){
     #col <- compoundslist$id[[n]]
     SMILES <- compoundslist_onlySMILES$SMILES[[n]]
-    
+
     mol2 <- parse.smiles(SMILES)[[1]]
-    
+
     if(!is.null(mol2)){
-      
+
       KlekotaRoth_fingerprints <- get.fingerprint(mol2,
                                                   type = "kr")
-      
+
       table <- as.data.frame(KlekotaRoth_fingerprints@bits) %>%
         mutate(fp = 1) %>%
         mutate(fp = as.numeric(fp))
       colnames(table) <- c("row", SMILES)
-      
+
       table <- table %>%
         mutate(row = as.numeric(row))
-      
+
       suppressMessages(datarow <- list %>%
         left_join(table) %>%
         select(-row))
-      
+
       newrow <- as.data.frame(t(datarow)) %>%
         rownames_to_column()
-      
+
       KlekotaRoth_table <- KlekotaRoth_table %>%
         add_row(newrow)
     }
-    
+
     else{
       print(SMILES)
     }
   }
-  
+
   KlekotaRoth_table[is.na(KlekotaRoth_table)] <- 0
-  
+
   KlekotaRoth_table <- KlekotaRoth_table %>%
     filter(rowname != "row")
-  
+
   names(KlekotaRoth_table) <- c("SMILES", col_names_KlekotaRoth)
-  
-  
+
+
   #custommadeSMARTS
   row <- c(1:202)
   list <- as.data.frame(row)
-  
+
   smartslist <- c("C1(CCC3C2CCCC3)CCCCC12","CC(C)CC(C(~O)[O,N])N","CC(C(C(~O)[O,N])N)O",
                   "[OH0]=[CH0](O)[CH1][CH2][OH1]","[OH0]=[CH0](N)[CH1](N)[CH2][OH1]","[OH0]=[CH0](N)[CH1]N",
                   "[CH2]([CH1]([CH2][OH0][PH0](~O)(~O)~O)~O)~O","[CH2]([CH1]([CH1]([CH1]([CH1]1~[#7])~O)~O)[OH0]1)[OH0][PH0](~O)(~O)~O",
@@ -388,7 +388,7 @@ Fingerprint_calc <- function(compoundslist){
                   "[CH3][CH2][CH2][CH2][CH2][CH1]=[CH1][CH2][CH1]","c[OH0][CH2][CH0]","[CH0]([CH1])[OH1]","c[CH1]=[CH1][CH0](=[OH0])[OH0][CH1]",
                   "[CH3][CH0](=[OH0])[NH1][CH1]","[CH0](c)c","[CH0][NH2]","[CH0]([CH0])[OH1]","[CH0][NH1]c","[CH0]([CH3])[OH0][CH1]",
                   "[CH3][OH0][CH0][CH0]","c[CH0](=[OH0])[OH1]","[CH1][OH0][CH0](=[OH0])[CH3]")
-  
+
   col_names_custom <- c("Un8179","Un8181","Un8182","Un8183","Un8184","Un8185","Un8187","Un8190","Un8191","Un8192","Un8193","Un8194",
                         "Un8197","Un8198","Un8199","Un8200","Un8202","Un8203","Un8205","Un8206","Un8207","Un8210","Un8213","Un8215",
                         "Un8217","Un8218","Un8219","Un8220","Un8221","Un8222","Un8224","Un8225","Un8226","Un8228","Un8229","Un8230",
@@ -406,63 +406,63 @@ Fingerprint_calc <- function(compoundslist){
                         "Un8417","Un8420","Un8421","Un8422","Un8423","Un8424","Un8426","Un8427","Un8428","Un8431","Un8432","Un8433",
                         "Un8434","Un8436","Un8437","Un8438","Un8439","Un8440","Un8441","Un8443","Un8444","Un8445","Un8446","Un8447",
                         "Un8448","Un8450","Un8451","Un8453","Un8454","Un8455","Un8456","Un8457","Un8460","Un8461")
-  
-  
+
+
   custom_table <- as.data.frame(t(list)) %>%
     rownames_to_column()
-  
+
   for (n in 1:length(compoundslist_onlySMILES$SMILES)){
     #col <- compoundslist$id[[n]]
     SMILES <- compoundslist_onlySMILES$SMILES[[n]]
-    
+
     mol2 <- parse.smiles(SMILES)[[1]]
-    
+
     if(!is.null(mol2)){
-      
+
       custom_fingerprints <- get.fingerprint(mol2,
                                              type = "substructure",
                                              substructure.pattern = smartslist)
-      
+
       table <- as.data.frame(custom_fingerprints@bits) %>%
         mutate(fp = 1) %>%
         mutate(fp = as.numeric(fp))
       colnames(table) <- c("row", SMILES)
-      
+
       table <- table %>%
         mutate(row = as.numeric(row))
-      
+
       suppressMessages(datarow <- list %>%
         left_join(table) %>%
         select(-row))
-      
+
       newrow <- as.data.frame(t(datarow)) %>%
         rownames_to_column()
-      
+
       custom_table <- custom_table %>%
         add_row(newrow)
     }
-    
+
     else{
       print(SMILES)
     }
   }
-  
+
   custom_table[is.na(custom_table)] <- 0
-  
+
   custom_table <- custom_table %>%
     filter(rowname != "row")
-  
+
   names(custom_table) <- c("SMILES", col_names_custom)
-  
-  
+
+
   #ringsystems
   # list <- read_delim("ringsystem_fingerprints_names.txt", delim = ",") %>%
   #   mutate(row = as.numeric(rowRing)) %>%
   #   select(row)
-  
+
   row <- c(1:113)
   list <- as.data.frame(row)
-  
+
   smartslistring <- c("[CH1]([CH1][OH0][CH1]-1~[#7])([CH1]-1~[#8])~[#8]","c(:c(:c(:c:c:1):o:c:c:2):c:2):c:1","C(C(C(C(C-1~[#8])~[#8])~[#8])~[#8])(C-1~[#8])~[#8]",
                       "c(:c:o:c(:c:c(:c:c:1~[#8])~[#8]):c:1:2):c:2~[#8]","c(:c(:c:c:c:1~[#17])~[#8]):c:1~[#8]","c(:c(:n:c(:n:1)~[#8])~[#7])(:c:1~[#8])~[#7]",
                       "c(:c(:c:c:c:1)~[#8]):c:1","C(CC(OC=1)~[#8])C=1","c(:c:c:c:c:1:c:c:n:2):c:1:2","c(:c(:c:c:c:1)~[#16]):c:1",
@@ -478,7 +478,7 @@ Fingerprint_calc <- function(compoundslist){
                       "[CH1]([CH2][CH1][OH0][CH1]-1)[CH1]-1","c(:c:c(:c(:c:c:c:o:1):c:1:2)~[#8])(:c:2)~[#8]",
                       "[CH0]([CH1]([CH1]([CH1]=[CH1][OH0]-1)[CH1]-2~[#8])[CH1]-1~[#8])([CH1]-2-3)[OH0]-3",
                       "C(CCC(C-1CC(C-2~[#8])~[#8])C-2)(C-1CC=C-3C(C(CC-4)CCC-5)C-5)C-3-4","[CH0]([CH2][CH2][CH1][CH0]-1)[CH1]-1",
-                      "C(CC(C-1)~[#8])C-1~[#8]","c(:c:c:c(:c:1)~[#9])(:c:1)~[#7]","C(COC-1)(C-1)~[#8]","c(:n:c:n:c:1~[#7])(:c:1)~[#8]",    
+                      "C(CC(C-1)~[#8])C-1~[#8]","c(:c:c:c(:c:1)~[#9])(:c:1)~[#7]","C(COC-1)(C-1)~[#8]","c(:n:c:n:c:1~[#7])(:c:1)~[#8]",
                       "c(:c:c:n:c:1~[#7]):n:1","c(:c(:c(:c(:c:1)~[#8])[CH0]([CH2][CH1]-2)~[#8])[OH0]-2):c:1~[#8]","C(CCCC-1~[#8])C-1",
                       "n(:c:c:c:1):c:1","c(:c:c(:n:c:1)~[#8]):n:1","c(:c:o:c(:c:c:c:c:1):c:1:2)(:c:2~[#8])~[#8]",
                       "[CH1]([CH2][CH2][CH0][CH1]-1)[CH2]-1","[CH0]([CH1][CH2][CH2]-1)[CH0]-1~[#8]","c(:n:c:n:c:1)(:c:1)~[#7]",
@@ -500,8 +500,8 @@ Fingerprint_calc <- function(compoundslist){
                       "[CH1]([CH1][CH1][CH1][CH2]-1)[OH0]-1","c(:n:c:n:c:1:c:c:c:c:2)(:c:1:2)~[#8]","[CH1]([CH1][CH1]([CH2][CH1]-1~[#8])~[#8])[OH0]-1",
                       "c1ccccc1-c","[cD2]1ccc[cD2]c1-c(c)c",
                       "[C](-,=[C]-,=1)-,=[C](-,=[C]-,=2)-[C](-,=[C]-,=[C]-,=[C]-,=2-,=[O])-,=[C](-,=[C]-,=3)-,=[C]-,=1-,=[C](-,=[C]-,=4)-,=[C](-,=[C]-,=3)-,=[C]-,=[C]-,=4")
-  
-  
+
+
   col_names_ring <- c("Un8468","Un8480","Un8483","Un8484","Un8486","Un8489","Un8491","Un8494","Un8495","Un8496","Un8497","Un8498",
                       "Un8501","Un8502","Un8505","Un8516","Un8521","Un8524","Un8529","Un8539","Un8540","Un8541","Un8542","Un8546",
                       "Un8547","Un8553","Un8556","Un8558","Un8559","Un8563","Un8566","Un8568","Un8575","Un8581","Un8582","Un8584",
@@ -512,55 +512,55 @@ Fingerprint_calc <- function(compoundslist){
                       "Un8779","Un8782","Un8783","Un8788","Un8789","Un8797","Un8802","Un8808","Un8814","Un8820","Un8834","Un8843",
                       "Un8849","Un8852","Un8854","Un8858","Un8860","Un8864","Un8871","Un8874","Un8881","Un8888","Un8889","Un8901",
                       "Un8903","Un8908","Un8922","Un8923","Un8924")
-  
+
   ring_table <- as.data.frame(t(list)) %>%
     rownames_to_column()
-  
+
   for (n in 1:length(compoundslist_onlySMILES$SMILES)){
     #col <- compoundslist$id[[n]]
     SMILES <- compoundslist_onlySMILES$SMILES[[n]]
-    
+
     mol2 <- parse.smiles(SMILES)[[1]]
-    
+
     if(!is.null(mol2)){
-      
+
       ring_fingerprints <- get.fingerprint(mol2,
                                            type = "substructure",
                                            substructure.pattern = smartslistring)
-      
+
       table <- as.data.frame(ring_fingerprints@bits) %>%
         mutate(fp = 1) %>%
         mutate(fp = as.numeric(fp))
       colnames(table) <- c("row", SMILES)
-      
+
       table <- table %>%
         mutate(row = as.numeric(row))
-      
+
       suppressMessages(datarow <- list %>%
         left_join(table) %>%
         select(-row))
-      
+
       newrow <- as.data.frame(t(datarow)) %>%
         rownames_to_column()
-      
+
       ring_table <- ring_table %>%
         add_row(newrow)
     }
-    
+
     else{
       print(SMILES)
     }
   }
-  
+
   ring_table[is.na(ring_table)] <- 0
-  
+
   ring_table <- ring_table %>%
     filter(rowname != "row")
-  
+
   names(ring_table) <- c("SMILES", col_names_ring)
-  
-  
-  
+
+
+
   #Combining all FP together
   suppressMessages(allFP_table <- substr_table %>%
     left_join(maccs_table) %>%
@@ -568,10 +568,10 @@ Fingerprint_calc <- function(compoundslist){
     left_join(KlekotaRoth_table) %>%
     left_join(custom_table) %>%
     left_join(ring_table))
-  
+
   suppressMessages(final_table <- compoundslist %>%
     left_join(allFP_table))
-  
+
   return(final_table)
 }
 
@@ -611,7 +611,7 @@ add_mobile_phase_composition = function(data,
                                         eluent,
                                         organic_modifier = "MeCN",
                                         pH_aq = 7.0) {
-  
+
   if("retention_time" %in% colnames(data) == T) {
     if (is.character(eluent)) {
     eluent = read_delim(eluent,
@@ -619,15 +619,15 @@ add_mobile_phase_composition = function(data,
                       col_names = TRUE,
                       show_col_types = FALSE)
     }
-    
+
     data = data %>%
       mutate(organic_modifier_percentage = organicpercentage(eluent, retention_time))
   }
-  
+
   data = data %>%
     mutate(viscosity = viscosity(organic_modifier_percentage, organic_modifier),
            surface_tension = surfacetension(organic_modifier_percentage, organic_modifier),
-           polarity_index = polarityindex(organic_modifier_percentage, organic_modifier), 
+           polarity_index = polarityindex(organic_modifier_percentage, organic_modifier),
            organic_modifier = organic_modifier,
            pH_aq = pH_aq)
   return(data)
@@ -637,12 +637,12 @@ add_mobile_phase_composition = function(data,
 
 #' Isotope distribution
 #'
-#' This function calculates isotopic abundance for a chemical based on SMILES notation. This number can later be used as a coefficient to multiply the area corresponding to 
-#' a monoisotopic ion. 
+#' This function calculates isotopic abundance for a chemical based on SMILES notation. This number can later be used as a coefficient to multiply the area corresponding to
+#' a monoisotopic ion.
 #'
 #' @param smiles SMILES notation of the compound
 #' @return isotopic abundance coefficient
-#' @examples 
+#' @examples
 #' isotopedistribution("CN1C=NC2=C1C(=O)N(C(=O)N2C)C")
 #' @export
 isotopedistribution <- function(smiles){
@@ -650,7 +650,7 @@ isotopedistribution <- function(smiles){
   molecule <- parse.smiles(smiles)[[1]]
   formula <- get.mol2formula(molecule,charge=0)
   formula <- formula@string
-  
+
   # Chemical formula to isotope distribution
   data(isotopes, package = "enviPat")
   pattern<-isopattern(isotopes,
@@ -670,28 +670,28 @@ summarized_SIRIUS_identification_results <- function(folder) {
   setwd(folder)
   subfolder <- dir(folder, all.files = TRUE, recursive = TRUE, pattern = "*.tsv")
   compiled_data <- tibble()
-  
+
   for (filename in subfolder) {
     if (grepl("/structure_candidates", filename, fixed=TRUE)){
-      
+
       comp_name <- str_split(filename, "/")
       folder_name = comp_name[[1]][1]
-      
+
       folder_number <- as.numeric(str_split(folder_name, "_")[[1]][1])
       id <- as.character(tail(str_split(folder_name, "_")[[1]], n=1)) # id is taken as the last element of the folder name after splitting the string by underscores
-      
-      data_smile <- read_delim(filename, delim = "\t") 
-      
+
+      data_smile <- read_delim(filename, delim = "\t")
+
       if (dim(data_smile)[1] > 0) {
         data_smile_notempty <- data_smile %>%
-          select(rank, formulaRank, molecularFormula, `CSI:FingerIDScore`, adduct, InChI, smiles) %>% 
+          select(rank, formulaRank, molecularFormula, `CSI:FingerIDScore`, adduct, InChI, smiles) %>%
           mutate(id = id,
                  folder_number = folder_number) %>%
           rename(rank_withinFormula = rank,
                  siriusscore = `CSI:FingerIDScore`,
                  SMILES = smiles) %>%
           select(id, folder_number, everything())
-        
+
         compiled_data <- compiled_data %>%
           bind_rows(data_smile_notempty) %>%
           unique()
@@ -704,60 +704,60 @@ summarized_SIRIUS_identification_results <- function(folder) {
     arrange(desc(siriusscore)) %>%
     mutate(rank = row_number()) %>%
     ungroup()
-  
+
   return(compiled_data)
 }
 
 
 
-
+#' @export
 FpTableForPredictions <- function(folderwithSIRIUSfiles){
-  
+
   #uncompressing the compressed files - in case there has been any updates in SIRIUS project, good if it is done again so that compressed files are up to date
   all_files_in_SIRIUS_folder <- list.files(path = folderwithSIRIUSfiles, full.names = TRUE, recursive = TRUE)
   exts <- file_ext(all_files_in_SIRIUS_folder)
-  all_dirs <- tibble(dirs = all_files_in_SIRIUS_folder, 
+  all_dirs <- tibble(dirs = all_files_in_SIRIUS_folder,
                      exts = exts)
-  
-  all_dirs <- all_dirs %>% 
+
+  all_dirs <- all_dirs %>%
     filter(exts == "")
   if (length(all_dirs$dirs) > 0) {for (zipF in all_dirs$dirs){
     outDir <- paste(zipF, "_uncompressed",
                     sep = "")
     unzip(zipF, exdir = outDir)
   }}
-  
+
   # FP calc
   subfolder <- dir(folderwithSIRIUSfiles, all.files = TRUE, recursive = TRUE, pattern = ".fpt")
   subfolder_score <- dir(folderwithSIRIUSfiles, all.files = TRUE, recursive = TRUE, pattern = ".info")
-  
+
   # find common fingerprints of pos and neg mode
   fp_names_pos <- paste("Un", read_delim(paste(folderwithSIRIUSfiles,"/csi_fingerid.tsv", sep = ""), delim = "\t", show_col_types = FALSE)$absoluteIndex, sep = "")
   fp_names_neg <- paste("Un", read_delim(paste(folderwithSIRIUSfiles,"/csi_fingerid_neg.tsv", sep = "" ), delim = "\t", show_col_types = FALSE)$absoluteIndex, sep = "")
   fp_names_common = intersect(fp_names_pos, fp_names_neg)
-  
-  
-  selected_rank1_table <- FingerPrintTable(subfolder, fp_names_pos, fp_names_neg, fp_names_common, folderwithSIRIUSfiles) %>% 
+
+
+  selected_rank1_table <- FingerPrintTable(subfolder, fp_names_pos, fp_names_neg, fp_names_common, folderwithSIRIUSfiles) %>%
     inner_join(SiriusScoreRank1(subfolder_score, folderwithSIRIUSfiles), by = c("id", "foldernumber", "predion"))
-  
+
   final_table_mass <- selected_rank1_table %>%
     mutate(exactMass = "mass")
-  
+
   for(n in 1:length(final_table_mass$predform)){
     formula <- get.formula(final_table_mass$predform[n])
     final_table_mass$exactMass[n] <- formula@mass
   }
-  
+
   final_table_mass <- final_table_mass %>%
     mutate(exactMass = as.numeric(exactMass)) %>%
     select(id, foldernumber, predform, predion, exactMass, everything())
-  
+
   return(final_table_mass)
 }
 
 #' @export
 FingerPrintTable <- function(subfolder, fp_names_pos, fp_names_neg, fp_names_common, folderwithSIRIUSfiles){
-  
+
   subfolder_pos <- c()
   subfolder_neg <- c()
   for(subfold in subfolder){
@@ -765,7 +765,7 @@ FingerPrintTable <- function(subfolder, fp_names_pos, fp_names_neg, fp_names_com
       subfolder_pos <- subfolder_pos %>%
         list.append(subfold)
     }
-    
+
     if (( grepl("]-", subfold, fixed=TRUE)) & grepl("/fingerprint", subfold, fixed=TRUE)){
       subfolder_neg <- subfolder_neg %>%
         list.append(subfold)
@@ -775,17 +775,17 @@ FingerPrintTable <- function(subfolder, fp_names_pos, fp_names_neg, fp_names_com
   if(!is.null(subfolder_pos)) {
     fp_all <- read_in_fingerprints(subfolder_pos, folderwithSIRIUSfiles, fp_names_pos, fp_names_common)
   }
-  
+
   if(!is.null(subfolder_neg)) {
     fp_neg <- read_in_fingerprints(subfolder_neg, folderwithSIRIUSfiles, fp_names_neg, fp_names_common)
     if(dim(fp_all)[1] > 0) {
-      fp_all <- fp_all %>% 
+      fp_all <- fp_all %>%
         bind_rows(fp_neg)
     } else {
       fp_all <- fp_neg
     }
   }
-  
+
   return(fp_all)
 }
 
@@ -795,11 +795,11 @@ read_in_fingerprints <- function(subfolder, folderwithSIRIUSfiles, names_all_col
   for(direct in subfolder){
     comp_name <- str_split(direct, "/")
     folder_name = comp_name[[1]][1]
-    
+
     sir_fold <- as.numeric(str_split(folder_name, "_")[[1]][1])
     id_this <- as.character(tail(str_split(folder_name, "_")[[1]], n=1)) # id is taken as the last element of the folder name after splitting the string by underscores
-    pred_ion <- as.character(sub("\\..*", "", comp_name[[1]][3])) 
-    
+    pred_ion <- as.character(sub("\\..*", "", comp_name[[1]][3]))
+
     filedata <- read_delim(paste(folderwithSIRIUSfiles, direct, sep = "/"), delim = " ", col_names = FALSE, show_col_types = FALSE)
     filedata <- as.data.frame(t(filedata))
     filedata <- filedata %>%
@@ -810,37 +810,37 @@ read_in_fingerprints <- function(subfolder, folderwithSIRIUSfiles, names_all_col
     fingerprint_data <- fingerprint_data %>%
       bind_rows(filedata)
   }
-  
+
   if(nrow(fingerprint_data) != 0){
     colnames(fingerprint_data) <- c(names_all_columns, "predion", "id", "foldernumber", "predform")
-    fingerprint_data = fingerprint_data %>% 
+    fingerprint_data = fingerprint_data %>%
       select(id, foldernumber, predform, predion, all_of(names_common))
   }
-  
+
   return(fingerprint_data)
 }
 
 #' @export
 SiriusScoreRank1 <- function(subfolder_score, folderwithSIRIUSfiles){
   scores_table <- tibble()
-  
+
   for (filename in subfolder_score) {
     if (grepl("/scores", filename, fixed=TRUE)){
-      
+
       comp_name <- str_split(filename, "/")
       folder_name = comp_name[[1]][1]
-      
+
       foldernumber <- as.numeric(str_split(folder_name, "_")[[1]][1])
       id <- as.character(tail(str_split(folder_name, "_")[[1]], n=1)) # id is taken as the last element of the folder name after splitting the string by underscores
-      predion <- as.character(sub("\\..*", "", comp_name[[1]][3])) 
-      
+      predion <- as.character(sub("\\..*", "", comp_name[[1]][3]))
+
       data_here = read_delim(paste(folderwithSIRIUSfiles, filename, sep = "/"), delim = "\t", col_names = F)
-      SiriusScore <- data_here %>% 
+      SiriusScore <- data_here %>%
         filter(X1 == "sirius.scores.SiriusScore")
-      
+
       filedata <- tibble(id , foldernumber, predion) %>%
         mutate(siriusscore = as.numeric(SiriusScore$X2))
-      
+
       if(dim(scores_table)[1] > 0) {
         scores_table <- scores_table%>%
           bind_rows(filedata)
@@ -849,24 +849,24 @@ SiriusScoreRank1 <- function(subfolder_score, folderwithSIRIUSfiles){
       }
     }
   }
-  scores_table = scores_table %>% 
-    filter(grepl("[M+H]+", predion, fixed = TRUE) | grepl("[M]+", predion, fixed = TRUE)) %>% 
+  scores_table = scores_table %>%
+    filter(grepl("[M+H]+", predion, fixed = TRUE) | grepl("[M]+", predion, fixed = TRUE)) %>%
     mutate(siriusscore = as.numeric(siriusscore)) %>%
-    mutate(siriusscore = round(siriusscore, 10)) %>% 
+    mutate(siriusscore = round(siriusscore, 10)) %>%
     unique()
-  
+
   data_scores <- scores_table %>%
     select(-predion) %>% #if two compound have same siriusscore they get same rank
     group_by(id, foldernumber) %>%
     arrange(desc(siriusscore)) %>%
     mutate(rank = row_number()) %>%
     ungroup() %>%
-    left_join(scores_table, 
+    left_join(scores_table,
               by = c("id", "foldernumber", "siriusscore")) %>%
     filter(rank == 1) %>%
     select(-rank) %>%
     unique()
-  
+
   return(data_scores)
 }
 
@@ -877,27 +877,27 @@ MS2Quant_quantify <- function(calibrants_suspects,
                               organic_modifier = "MeCN",
                               pH_aq = 2.7,
                               fingerprints = ""){
-  
+
   # Read in MS2Quant model
   data_list_sirius <- readRDS(system.file("model", "model_MS2Quant_xgbTree_allData.RData", package = "MS2Quant"))
   MS2Quant = data_list_sirius$model
-  
+
   if (is.character(calibrants_suspects))
   {
   # read in dataframe with calibrants and suspects
       calibrants_suspects <- read_delim(calibrants_suspects, show_col_types = FALSE)
   }
-  
+
   #************
   # CALIBRATION
   #************
-  
+
   # 1) Find calibration compounds with concentration and area information from the dataframe
   calibrants <- calibrants_suspects %>%
     drop_na(conc_M)
-  
+
   # 2) calculcate response factors (slopes of calibration graphs)
-  calibrants <- calibrants %>% 
+  calibrants <- calibrants %>%
     drop_na(SMILES) %>%
     group_by(SMILES, identifier) %>%
     mutate(IC = isotopedistribution(SMILES),
@@ -906,32 +906,32 @@ MS2Quant_quantify <- function(calibrants_suspects,
            retention_time = mean(retention_time),
            logRF = log10(slope)) %>%
     ungroup()
-  
-  
+
+
   plot_calgraph <- ggplot() +
     geom_point(data = calibrants,
                mapping = aes(x = conc_M,
                              y = area_IC)) +
     facet_wrap(~ identifier, scales = "free") +
     theme_classic()
-  
+
   # 1) Use SMILES of calibrants to calculate structural fingerprints
   calibrants_structural_FP <- Fingerprint_calc(calibrants)
-  
-  
-  # 2) Add eluent composition parameters 
+
+
+  # 2) Add eluent composition parameters
   calibrants_structural_FP <- add_mobile_phase_composition(calibrants_structural_FP,
                                                            eluent = eluent,
                                                            organic_modifier = organic_modifier,
                                                            pH_aq = pH_aq)
-  
+
   # 3) Predict logIE values with MS2Quant for calibrants
   calibrants_structural_FP <- calibrants_structural_FP %>%
     mutate(pred_logIE = predict(MS2Quant, newdata = calibrants_structural_FP))
-  
+
   # 4) Linear regression between logIE and logRF of calibrants
   linmod_calibration <- lm(logRF ~ pred_logIE, data = calibrants_structural_FP)
-  
+
   calibration_plot = ggplot(data = calibrants_structural_FP) +
     geom_point(mapping = aes(y = logRF,
                              x = pred_logIE),
@@ -948,95 +948,95 @@ MS2Quant_quantify <- function(calibrants_suspects,
     ylab(substitute(paste("log", italic("RF"))["measured"])) +
     theme_classic() +
     theme(aspect.ratio = 1)
-  
+
   linmod_calibration_summary <- summary(linmod_calibration)
-  
-  
+
+
   #************
   # SUSPECTS
   #************
-  
+
   # 1) identify the suspects - candidate structures or only area and retention time?
   suspects <- calibrants_suspects %>%
     filter(is.na(conc_M))
-  
-  suspects_with_candidate <- suspects %>% 
+
+  suspects_with_candidate <- suspects %>%
     drop_na(SMILES)
-  
-  suspects_unidentified <- suspects %>% 
+
+  suspects_unidentified <- suspects %>%
     filter(is.na(SMILES))
-  
+
   # 1) Get fingerprints for suspects
-  
+
   suspects_structural_FP = tibble()
-  
+
   ## from structure
   if (dim(suspects_with_candidate)[1] > 0) {
     suspects_with_candidate <- Fingerprint_calc(suspects_with_candidate)
-    
+
     suspects_with_candidate <- suspects_with_candidate %>%
       group_by(SMILES) %>%
       mutate(IC = isotopedistribution(SMILES)/100) %>%
       ungroup()
-    
+
       suspects_structural_FP <- suspects_with_candidate
-    
+
   }
-  
+
   ## from SIRIUS results folder
   if (fingerprints != "") {
-    
+
     if (is.character(fingerprints))
         suspects_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
     else
         suspects_fingerprints_SIRIUS <- fingerprints
-    
-    suppressMessages(suspects_unidentified <- suspects_unidentified %>% 
-      left_join(suspects_fingerprints_SIRIUS %>% 
+
+    suppressMessages(suspects_unidentified <- suspects_unidentified %>%
+      left_join(suspects_fingerprints_SIRIUS %>%
                   filter(grepl("[M+H]+", predion, fixed = TRUE) | grepl("[M]+", predion, fixed = TRUE)) %>%
-                  rename(identifier = id) %>% 
-                  mutate(identifier = as.character(identifier))) %>% 
+                  rename(identifier = id) %>%
+                  mutate(identifier = as.character(identifier))) %>%
       group_by(SMILES) %>%
       mutate(IC = 1) %>%
       ungroup())
-    
+
     if(dim(suspects_structural_FP)[1] > 0) {
-      suspects_structural_FP <- suspects_structural_FP %>% 
+      suspects_structural_FP <- suspects_structural_FP %>%
         bind_rows(suspects_unidentified)
     } else {
       suspects_structural_FP <- suspects_unidentified
     }
   }
-  
-  # 2) Add eluent composition parameters 
-  
+
+  # 2) Add eluent composition parameters
+
   suspects_structural_FP <- add_mobile_phase_composition(suspects_structural_FP,
                                                          eluent = eluent,
                                                          organic_modifier = organic_modifier,
                                                          pH_aq = pH_aq)
-  
+
   # 3) Predict logIE values with MS2Quant for calibrants
-  
+
   suspects_structural_FP <- suspects_structural_FP %>%
     mutate(pred_logIE = predict(MS2Quant, newdata = suspects_structural_FP))
-  
+
   # 4) Convert logIE to logRF values
-  
+
   suspects_structural_FP <- suspects_structural_FP %>%
     mutate(logRF_pred = pred_logIE*linmod_calibration$coefficients[2] + linmod_calibration$coefficients[1])
-  
+
   # 5) Calculate concentrations using integrated areas
-  
+
   suspects_concentrations <- suspects_structural_FP %>%
     mutate(conc_M = area*IC/10^logRF_pred) %>%
     select(identifier, SMILES, area, retention_time, conc_M, logRF_pred)
-  
+
   data_list <-list("calibrants_separate_plots" = plot_calgraph,
                    "logIE_logRF_calibration_plot" = calibration_plot,
                    "calibration_linear_model_summary" = linmod_calibration_summary,
                    "suspects_concentrations" = suspects_concentrations,
                    "date" = Sys.Date())
-  
+
   return(data_list)
 }
 
@@ -1047,87 +1047,87 @@ MS2Quant_predict_IE <- function(chemicals_for_IE_prediction,
                                 organic_percentage = 80,
                                 pH_aq = 2.7,
                                 fingerprints = ""){
-  
+
   # Read in MS2Quant model
   data_list_sirius <- readRDS(system.file("model", "model_MS2Quant_xgbTree_allData.RData", package = "MS2Quant"))
   MS2Quant = data_list_sirius$model
-  
+
   if (is.character(chemicals_for_IE_prediction))
   {
     # read in dataframe with chemicals
     chemicals_for_IE_prediction <- read_delim(chemicals_for_IE_prediction, show_col_types = FALSE)
   }
-  
+
   #check if has retention time
   if("retention_time" %in% colnames(chemicals_for_IE_prediction) == F) {
-    chemicals_for_IE_prediction = chemicals_for_IE_prediction %>% 
+    chemicals_for_IE_prediction = chemicals_for_IE_prediction %>%
       mutate(organic_modifier_percentage = organic_percentage)
   }
-  
-  
+
+
   # 1) identify the chemicals with and without SMILES
-  
-  chemicals_with_SMILES <- chemicals_for_IE_prediction %>% 
+
+  chemicals_with_SMILES <- chemicals_for_IE_prediction %>%
     drop_na(SMILES)
-  
-  chemicals_unidentified <- chemicals_for_IE_prediction %>% 
+
+  chemicals_unidentified <- chemicals_for_IE_prediction %>%
     filter(is.na(SMILES))
-  
+
   # 1) Get fingerprints for chemicals
-  
+
   chemicals_structural_FP = tibble()
-  
+
   ## from structure
   if (dim(chemicals_with_SMILES)[1] > 0) {
     chemicals_with_SMILES <- Fingerprint_calc(chemicals_with_SMILES)
-    
+
     chemicals_with_SMILES <- chemicals_with_SMILES %>%
       group_by(SMILES) %>%
       mutate(IC = isotopedistribution(SMILES)/100) %>%
       ungroup()
-    
+
     chemicals_structural_FP <- chemicals_with_SMILES
-    
+
   }
-  
+
   ## from SIRIUS results folder
   if (fingerprints != "") {
-    
+
     if (is.character(fingerprints))
       chemicals_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
     else
       chemicals_fingerprints_SIRIUS <- fingerprints
-    
-    suppressMessages(chemicals_unidentified <- chemicals_unidentified %>% 
-                       left_join(chemicals_fingerprints_SIRIUS %>% 
+
+    suppressMessages(chemicals_unidentified <- chemicals_unidentified %>%
+                       left_join(chemicals_fingerprints_SIRIUS %>%
                                    filter(grepl("[M+H]+", predion, fixed = TRUE) | grepl("[M]+", predion, fixed = TRUE)) %>%
-                                   rename(identifier = id) %>% 
+                                   rename(identifier = id) %>%
                                    mutate(identifier = as.character(identifier))))
-    
+
     if(dim(chemicals_structural_FP)[1] > 0) {
-      chemicals_structural_FP <- chemicals_structural_FP %>% 
+      chemicals_structural_FP <- chemicals_structural_FP %>%
         bind_rows(chemicals_unidentified)
     } else {
       chemicals_structural_FP <- chemicals_unidentified
     }
   }
-  
-  # 2) Add eluent composition parameters 
-  
+
+  # 2) Add eluent composition parameters
+
   chemicals_predicted_IEs <- add_mobile_phase_composition(chemicals_structural_FP,
                                                           eluent = eluent,
                                                           organic_modifier = organic_modifier,
                                                           pH_aq = pH_aq)
-  
+
   # 3) Predict logIE values with MS2Quant for all chemicals
-  
+
   chemicals_predicted_IEs <- chemicals_predicted_IEs %>%
-    mutate(pred_logIE = predict(MS2Quant, newdata = chemicals_predicted_IEs)) %>% 
+    mutate(pred_logIE = predict(MS2Quant, newdata = chemicals_predicted_IEs)) %>%
     select(colnames(chemicals_for_IE_prediction), pred_logIE)
-  
-  
+
+
   data_list <-list("chemicals_predicted_IEs" = chemicals_predicted_IEs,
                    "date" = Sys.Date())
-  
+
   return(data_list)
 }
