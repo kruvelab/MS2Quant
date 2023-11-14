@@ -984,7 +984,7 @@ MS2Quant_quantify <- function(calibrants_suspects,
   }
 
   ## from SIRIUS results folder
-  if (fingerprints != "") {
+  if ((is.character(fingerprints) && fingerprints != "") || (is.data.frame(fingerprints) && nrow(fingerprints) > 0)) {
 
     if (is.character(fingerprints))
         suspects_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
