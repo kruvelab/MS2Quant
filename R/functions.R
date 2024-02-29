@@ -1,16 +1,20 @@
+#' @import caret
+#' @import dplyr
 #' @import enviPat
+#' @import ggplot2
+#' @import rcdk
+#' @import rcdklibs
+#' @import readr
 #' @import rJava
 #' @import rlist
-#' @import rcdklibs
-#' @import rcdk
-#' @import xgboost
-#' @import ggplot2
-#' @import tidyr
-#' @import dplyr
-#' @import readr
-#' @import tibble
-#' @import xfun
 #' @import stringr
+#' @import tibble
+#' @import tidyr
+#' @import xfun
+#' @import xgboost
+#'
+#'
+#'
 NULL
 
 #' Linear regression
@@ -653,12 +657,14 @@ isotopedistribution <- function(smiles){
 
   # Chemical formula to isotope distribution
   data(isotopes, package = "enviPat")
-  pattern<-isopattern(isotopes,
+  suppressMessages( # the electron mass is not relevant here, therefore the message is suppressed
+    pattern<-isopattern(isotopes,
                       formula,
                       threshold=0.1,
                       plotit=FALSE,
                       charge=FALSE,
                       algo=1)
+  )
   isotopes <- as.data.frame(pattern[[1]])
   isotope_dist <- as.numeric(sum(isotopes$abundance))
   return(isotope_dist)
@@ -917,7 +923,7 @@ MS2Quant_quantify <- function(calibrants_suspects,
 
   # de-duplicate calibrant rows
   calibrants <- calibrants %>% distinct(SMILES, identifier, .keep_all = TRUE)
-  
+
   # 1) Use SMILES of calibrants to calculate structural fingerprints
   calibrants_structural_FP <- Fingerprint_calc(calibrants)
 
@@ -989,19 +995,18 @@ MS2Quant_quantify <- function(calibrants_suspects,
   ## from SIRIUS results folder
   if ((is.character(fingerprints) && fingerprints != "") || (is.data.frame(fingerprints) && nrow(fingerprints) > 0)) {
 
-    if (is.character(fingerprints))
-        suspects_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
-    else
-        suspects_fingerprints_SIRIUS <- fingerprints
+    if (is.character(fingerprints)) {
+      suspects_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
+    } else {
+      suspects_fingerprints_SIRIUS <- fingerprints
+    }
 
     suppressMessages(suspects_unidentified <- suspects_unidentified %>%
       left_join(suspects_fingerprints_SIRIUS %>%
                   filter(grepl("[M+H]+", predion, fixed = TRUE) | grepl("[M]+", predion, fixed = TRUE)) %>%
                   rename(identifier = id) %>%
-                  mutate(identifier = as.character(identifier))) %>%
-      group_by(SMILES) %>%
-      mutate(IC = 1) %>%
-      ungroup())
+                  mutate(identifier = as.character(identifier),
+                         IC = 1)))
 
     if(dim(suspects_structural_FP)[1] > 0) {
       suspects_structural_FP <- suspects_structural_FP %>%
@@ -1018,14 +1023,17 @@ MS2Quant_quantify <- function(calibrants_suspects,
                                                          organic_modifier = organic_modifier,
                                                          pH_aq = pH_aq)
 
-  # 3) Predict logIE values with MS2Quant for calibrants
-
-  suspects_structural_FP <- suspects_structural_FP %>%
-    mutate(pred_logIE = predict(MS2Quant, newdata = suspects_structural_FP))
+  # 3) Predict logIE values with MS2Quant for suspects
+  suspects_IE_pred <- suspects_structural_FP
+  suspects_IE_pred <- suspects_IE_pred %>%
+    drop_na(IC) %>%
+    mutate(pred_logIE = predict(MS2Quant, newdata = suspects_IE_pred))
 
   # 4) Convert logIE to logRF values
 
   suspects_structural_FP <- suspects_structural_FP %>%
+    left_join(suspects_IE_pred %>%
+                select(identifier, SMILES, retention_time, area, pred_logIE)) %>%
     mutate(logRF_pred = pred_logIE*linmod_calibration$coefficients[2] + linmod_calibration$coefficients[1])
 
   # 5) Calculate concentrations using integrated areas
@@ -1082,9 +1090,10 @@ MS2Quant_predict_IE <- function(chemicals_for_IE_prediction,
 
   ## from structure
   if (dim(chemicals_with_SMILES)[1] > 0) {
-    chemicals_with_SMILES <- Fingerprint_calc(chemicals_with_SMILES)
+    chemicals_with_SMILES_FP <- Fingerprint_calc(chemicals_with_SMILES %>% select(SMILES) %>% unique())
 
     chemicals_with_SMILES <- chemicals_with_SMILES %>%
+      left_join(chemicals_with_SMILES_FP) %>%
       group_by(SMILES) %>%
       mutate(IC = isotopedistribution(SMILES)/100) %>%
       ungroup()
@@ -1096,16 +1105,18 @@ MS2Quant_predict_IE <- function(chemicals_for_IE_prediction,
   ## from SIRIUS results folder
   if ((is.character(fingerprints) && fingerprints != "") || (is.data.frame(fingerprints) && nrow(fingerprints) > 0)) {
 
-    if (is.character(fingerprints))
+    if (is.character(fingerprints)) {
       chemicals_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
-    else
+    } else {
       chemicals_fingerprints_SIRIUS <- fingerprints
+    }
 
     suppressMessages(chemicals_unidentified <- chemicals_unidentified %>%
                        left_join(chemicals_fingerprints_SIRIUS %>%
                                    filter(grepl("[M+H]+", predion, fixed = TRUE) | grepl("[M]+", predion, fixed = TRUE)) %>%
                                    rename(identifier = id) %>%
-                                   mutate(identifier = as.character(identifier))))
+                                   mutate(identifier = as.character(identifier),
+                                          IC = 1)))
 
     if(dim(chemicals_structural_FP)[1] > 0) {
       chemicals_structural_FP <- chemicals_structural_FP %>%
@@ -1123,13 +1134,19 @@ MS2Quant_predict_IE <- function(chemicals_for_IE_prediction,
                                                           pH_aq = pH_aq)
 
   # 3) Predict logIE values with MS2Quant for all chemicals
+  all_chemicals_submitted_for_IE_pred = chemicals_predicted_IEs
 
   chemicals_predicted_IEs <- chemicals_predicted_IEs %>%
-    mutate(pred_logIE = predict(MS2Quant, newdata = chemicals_predicted_IEs)) %>%
+    drop_na(IC) %>%
+    mutate(pred_logIE = predict(MS2Quant, newdata = chemicals_predicted_IEs))
+
+  all_chemicals_submitted_for_IE_pred = all_chemicals_submitted_for_IE_pred %>%
+    left_join(chemicals_predicted_IEs %>%
+                select(colnames(chemicals_for_IE_prediction), pred_logIE)) %>%
     select(colnames(chemicals_for_IE_prediction), pred_logIE)
 
 
-  data_list <-list("chemicals_predicted_IEs" = chemicals_predicted_IEs,
+  data_list <-list("chemicals_predicted_IEs" = all_chemicals_submitted_for_IE_pred,
                    "date" = Sys.Date())
 
   return(data_list)
