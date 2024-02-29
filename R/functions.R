@@ -944,6 +944,7 @@ MS2Quant_quantify <- function(calibrants_suspects,
   } else if (model == "MS2Quant") {
     data_list_sirius <- readRDS(system.file("model", "model_MS2Quant_xgbTree_allData.RData", package = "MS2Quant"))
     model_here = data_list_sirius$model
+    type = "structural"
   }
 
 
