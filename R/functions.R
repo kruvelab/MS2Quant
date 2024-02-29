@@ -987,7 +987,7 @@ MS2Quant_quantify <- function(calibrants_suspects,
   }
 
   ## from SIRIUS results folder
-  if (fingerprints != "") {
+  if ((is.character(fingerprints) && fingerprints != "") || (is.data.frame(fingerprints) && nrow(fingerprints) > 0)) {
 
     if (is.character(fingerprints))
         suspects_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
@@ -1094,7 +1094,7 @@ MS2Quant_predict_IE <- function(chemicals_for_IE_prediction,
   }
 
   ## from SIRIUS results folder
-  if (fingerprints != "") {
+  if ((is.character(fingerprints) && fingerprints != "") || (is.data.frame(fingerprints) && nrow(fingerprints) > 0)) {
 
     if (is.character(fingerprints))
       chemicals_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
