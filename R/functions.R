@@ -915,6 +915,9 @@ MS2Quant_quantify <- function(calibrants_suspects,
     facet_wrap(~ identifier, scales = "free") +
     theme_classic()
 
+  # de-duplicate calibrant rows
+  calibrants <- calibrants %>% distinct(SMILES, identifier, .keep_all = TRUE)
+  
   # 1) Use SMILES of calibrants to calculate structural fingerprints
   calibrants_structural_FP <- Fingerprint_calc(calibrants)
 
