@@ -1,0 +1,2 @@
+formulaRank	molecularFormula	adduct	precursorFormula	SiriusScore	TreeScore	IsotopeScore	numExplainedPeaks	explainedIntensity	medianMassErrorFragmentPeaks(ppm)	medianAbsoluteMassErrorFragmentPeaks(ppm)	massErrorPrecursor(ppm)	lipidClass	ionMass	retentionTimeInSeconds	id	featureId
+1	C10H13N5O4	[M + H]+	C10H13N5O4	19.223277883673273	16.21022218101258	3.013055702660695	8	0.9113176996071952	2.123236695010929	2.438910789540426	2.1247375444981853		268.10460	NaN	1_centering_Unknown_5890_Unknown_5890	N/A

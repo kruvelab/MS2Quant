@@ -1,19 +1,21 @@
 {
-    "id": "1ABFBD7A",
+    "id": "2964C2C0",
     "path": "~/GitHub/MS2Quant/R/functions.R",
     "project_path": "R/functions.R",
     "type": "r_source",
-    "hash": "701521426",
+    "hash": "0",
     "contents": "",
     "dirty": false,
-    "created": 1726064714450.0,
+    "created": 1726068450436.0,
     "source_on_save": false,
     "relative_order": 6,
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "1216,102",
-        "scrollLine": "1215"
+        "cursorPosition": "964,34",
+        "scrollLine": "950",
+        "docOutlineVisible": "1",
+        "docOutlineSize": "201"
     },
     "folds": "",
     "lastKnownWriteTime": 1726068099,

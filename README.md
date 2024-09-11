@@ -155,7 +155,7 @@ library(MS2Quant)
 # positive mode MS2Quant
 path_dataframe_calibrants_suspects <- system.file("example_data", "quantification_example.csv", package = "MS2Quant")
 path_eluent_file <- system.file("example_data", "eluent.csv", package = "MS2Quant")
-path_suspects_sirius_project_folder <- system.file("example_data", "SIRIUS_results", package = "MS2Quant")
+path_suspects_sirius_project_folder <- system.file("example_data", "SIRIUS_results_pos", package = "MS2Quant")
 ionization = "esi_pos"
 
 # negative mode MS2Quant
