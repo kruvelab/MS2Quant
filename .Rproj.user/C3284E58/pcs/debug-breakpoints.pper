@@ -1,21 +1,5 @@
 {
     "debugBreakpointsState": {
-        "breakpoints": [
-            {
-                "id": 0,
-                "path": "~/GitHub/MS2Quant/R/functions.R",
-                "line_number": 1225,
-                "function_steps": "",
-                "function_name": "MS2Quant_quantify",
-                "state": 2,
-                "editor_state": 2,
-                "editor_line_number": 1225,
-                "is_pending_debug_completion": false,
-                "needs_updated_steps": false,
-                "type": 0,
-                "is_package_breakpoint": true,
-                "package_name": "MS2Quant"
-            }
-        ]
+        "breakpoints": []
     }
 }

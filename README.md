@@ -32,7 +32,7 @@ To install the package, run the following command in R:
 
 ```
 devtools::install_github("kruvelab/MS2Quant",
-                         ref="main",
+                         ref="changing_models",
                          INSTALL_opts="--no-multiarch")
 ```
 To test if the installation was successful, you can run the test code (see testing in Chapter 4.)
