@@ -585,6 +585,8 @@ descriptor_calc <- function(compoundslist,
       compoundslist = compoundslist %>%
         left_join(SMILES_list)
 
+
+
       write_delim(SMILES_list %>% select(SMILES) %>% unique(),
                   "SMILES.smi",
                   col_names = FALSE)
@@ -597,12 +599,19 @@ descriptor_calc <- function(compoundslist,
                          delim = ",",
                          col_names = TRUE)
 
+      if (length(unique(SMILES_list$SMILES)) == 1) {
+        descs = descs %>%
+          mutate_all(~replace(., str_detect(., "Infinity"), as.numeric(0))) %>%
+          mutate(Name = 1)
+      } else {
       descs = descs %>%
         mutate_all(~replace(., str_detect(., "Infinity"), as.numeric(0))) %>%
         group_by(Name) %>%
         mutate(Name = str_split(Name, pattern = "_")[[1]][length(str_split(Name, pattern = "_")[[1]])]) %>%
         ungroup() %>%
         mutate(Name = as.integer(Name))
+      }
+
 
       cols <- names(descs)
       descs[cols] <- lapply(descs[cols], as.numeric)
@@ -921,6 +930,7 @@ SiriusScoreRank1 <- function(subfolder_score, folderwithSIRIUSfiles){
 
 #' @export
 new_readin_FP_function <- function(folderwithSIRIUSfiles, all_files_uncompressed = FALSE) {
+  original_wd = getwd()
 
   #uncompressing the compressed files - in case there has been any updates in SIRIUS project, good if it is done again so that compressed files are up to date
   all_files_in_SIRIUS_folder <- list.files(path = folderwithSIRIUSfiles, full.names = TRUE, recursive = TRUE)
@@ -1038,6 +1048,7 @@ new_readin_FP_function <- function(folderwithSIRIUSfiles, all_files_uncompressed
   }
 
   print("Done!")
+  setwd(original_wd)
 
   return(fingerprints_data)
 
@@ -1103,7 +1114,8 @@ MS2Quant_quantify <- function(calibrants_suspects,
     drop_na(conc_M)
 
   # 2) calculcate response factors (slopes of calibration graphs)
-  calibrants <- calibrants %>%
+  suppressMessages(
+    calibrants <- calibrants %>%
     drop_na(SMILES) %>%
     group_by(SMILES, identifier) %>%
     mutate(IC = isotopedistribution(SMILES),
@@ -1112,6 +1124,7 @@ MS2Quant_quantify <- function(calibrants_suspects,
            retention_time = mean(retention_time),
            logRF = log10(slope)) %>%
     ungroup()
+  )
 
 
   plot_calgraph <- ggplot() +
@@ -1185,20 +1198,23 @@ MS2Quant_quantify <- function(calibrants_suspects,
   if (dim(suspects_with_candidate)[1] > 0) {
     suspects_with_candidate <- descriptor_calc(suspects_with_candidate, type)
 
-    suspects_with_candidate <- suspects_with_candidate %>%
-      group_by(SMILES) %>%
-      mutate(IC = isotopedistribution(SMILES)/100) %>%
-      ungroup()
+    suppressMessages(
+      suspects_with_candidate <- suspects_with_candidate %>%
+        group_by(SMILES) %>%
+        mutate(IC = isotopedistribution(SMILES)/100) %>%
+        ungroup())
 
       suspects_structural_FP <- suspects_with_candidate
+
 
   }
 
   ## from SIRIUS results folder
-  if (fingerprints != "") {
+  if (fingerprints != "" & type != "PaDEL") {
 
     if (is.character(fingerprints)){
-      suspects_fingerprints_SIRIUS = new_readin_FP_function(fingerprints)
+      invisible(capture.output(suspects_fingerprints_SIRIUS = suppressMessages(new_readin_FP_function(fingerprints))))
+
       #suspects_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
     } else {
       suspects_fingerprints_SIRIUS <- fingerprints
@@ -1221,6 +1237,9 @@ MS2Quant_quantify <- function(calibrants_suspects,
     } else {
       suspects_structural_FP <- suspects_unidentified
     }
+  } else {
+    suspects_structural_FP = suspects_structural_FP %>%
+      bind_rows(suspects_unidentified)
   }
 
   # 2) Add eluent composition parameters
