@@ -152,14 +152,25 @@ This code uses test data from the package.
 ```
 library(MS2Quant)
 
+# positive mode MS2Quant
 path_dataframe_calibrants_suspects <- system.file("example_data", "quantification_example.csv", package = "MS2Quant")
 path_eluent_file <- system.file("example_data", "eluent.csv", package = "MS2Quant")
 path_suspects_sirius_project_folder <- system.file("example_data", "SIRIUS_results", package = "MS2Quant")
+ionization = "esi_pos"
+
+# negative mode MS2Quant
+path_dataframe_calibrants_suspects <- system.file("example_data", "quantification_example_neg.csv", package = "MS2Quant")
+path_eluent_file <- system.file("example_data", "eluent.csv", package = "MS2Quant")
+path_suspects_sirius_project_folder <- system.file("example_data", "SIRIUS_results_neg", package = "MS2Quant")
+ionization = "esi_neg"
 
 MS2Quant_quantification_results <- MS2Quant_quantify(path_dataframe_calibrants_suspects,
                                                      path_eluent_file ,
                                                      organic_modifier = "MeCN",
                                                      pH_aq = 2.7,
+						     NH4 = 0,
+						     model = "MS2Quant",
+						     ionization,
                                                      path_suspects_sirius_project_folder)
 
 # Separate calibration plots for each calibrant
@@ -179,4 +190,7 @@ MS2Quant_quantification_results$date
 
 
 ```
+
+Complementary models on the same datasets have been developed based on PaDEL descriptors (model = "PaDEL").
+Additionally, [negative mode PFAS quantification model by Lauria et al.](https://doi.org/10.1021/acs.est.3c07220) can be accessed (model = "model_PFAS").
 
