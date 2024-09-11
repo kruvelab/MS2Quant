@@ -808,6 +808,7 @@ FingerPrintTable <- function(subfolder, fp_names_pos, fp_names_neg, fp_names_com
 
   subfolder_pos <- c()
   subfolder_neg <- c()
+  fp_all = tibble()
   for(subfold in subfolder){
     if (( grepl("]+", subfold, fixed=TRUE)) & grepl("/fingerprint", subfold, fixed=TRUE)){
       subfolder_pos <- subfolder_pos %>%
@@ -898,7 +899,7 @@ SiriusScoreRank1 <- function(subfolder_score, folderwithSIRIUSfiles){
     }
   }
   scores_table = scores_table %>%
-    filter(grepl("[M+H]+", predion, fixed = TRUE) | grepl("[M]+", predion, fixed = TRUE)) %>%
+    filter(grepl("[M+H]+", predion, fixed = TRUE) | grepl("[M]+", predion, fixed = TRUE) | grepl("[M-H]-", predion, fixed = TRUE) | grepl("[M]-", predion, fixed = TRUE)) %>%
     mutate(siriusscore = as.numeric(siriusscore)) %>%
     mutate(siriusscore = round(siriusscore, 10)) %>%
     unique()
@@ -918,6 +919,130 @@ SiriusScoreRank1 <- function(subfolder_score, folderwithSIRIUSfiles){
   return(data_scores)
 }
 
+#' @export
+new_readin_FP_function <- function(folderwithSIRIUSfiles, all_files_uncompressed = FALSE) {
+
+  #uncompressing the compressed files - in case there has been any updates in SIRIUS project, good if it is done again so that compressed files are up to date
+  all_files_in_SIRIUS_folder <- list.files(path = folderwithSIRIUSfiles, full.names = TRUE, recursive = TRUE)
+  exts <- file_ext(all_files_in_SIRIUS_folder)
+  all_dirs <- tibble(dirs = all_files_in_SIRIUS_folder,
+                     exts = exts)
+
+  all_dirs <- all_dirs %>%
+    filter(exts == "")
+  if (length(all_dirs$dirs) > 0) {
+    if (all_files_uncompressed == FALSE) {
+      for (zipF in all_dirs$dirs){
+        outDir <- paste(zipF, "_uncompressed",
+                        sep = "")
+        unzip(zipF, exdir = outDir)
+      }
+    }}
+
+  setwd(folderwithSIRIUSfiles)
+  # get dir to all features folders
+  all_dirs = list.dirs(path = folderwithSIRIUSfiles, full.names = F, recursive = FALSE)
+
+  # find common fingerprints of pos and neg mode
+  suppressMessages(
+    fp_names_pos <- paste("Un", read_delim(paste(folderwithSIRIUSfiles,"/csi_fingerid.tsv", sep = ""), delim = "\t", show_col_types = FALSE)$absoluteIndex, sep = "")
+  )
+  suppressMessages(
+    fp_names_neg <- paste("Un", read_delim(paste(folderwithSIRIUSfiles,"/csi_fingerid_neg.tsv", sep = "" ), delim = "\t", show_col_types = FALSE)$absoluteIndex, sep = "")
+  )
+  fp_names_common = intersect(fp_names_pos, fp_names_neg)
+
+  fingerprints_data_pos = tibble()
+  fingerprints_data_neg = tibble()
+  fingerprints_data = tibble()
+
+  print(paste0("Found ", length(all_dirs), " SIRIUS folders", sep = " "))
+  ii = 1
+
+  ##
+  for (dir in all_dirs) {
+    dir_files = list.files(dir)
+    formula_rank1 = ""
+
+    if ("fingerprints_uncompressed" %in% dir_files) {
+      dirs_FPs = list.files(paste0(dir, "/fingerprints_uncompressed", sep = ""), full.names = T)
+      if("formula_candidates.tsv" %in% dir_files) {
+        suppressMessages(
+          formula_candidates <- read_delim(paste0(dir, "/formula_candidates.tsv", sep = ""))
+        )
+        if(dim(formula_candidates)[1] > 0) {
+          formula_candidates = formula_candidates %>%
+            mutate(FP_exist = vapply(molecularFormula, function(x) any(grepl(x, dirs_FPs)), 1L)) %>%
+            filter(FP_exist == 1) %>%
+            filter(SiriusScore == max(SiriusScore))
+          formula_rank1 = formula_candidates$molecularFormula
+          if (length(formula_rank1) > 1) {
+            formula_rank1 = ""
+          }
+        }
+      }
+    }
+
+    if ("fingerprints_uncompressed" %in% dir_files & formula_rank1 != "") {
+      index_correct_formula_FP = grep(pattern = formula_rank1, dirs_FPs)
+      if (length(index_correct_formula_FP) == 1) {
+        dir_here = dirs_FPs[index_correct_formula_FP]
+        comp_name <- str_split(dir_here, "/")
+        folder_name = comp_name[[1]][1]
+
+        sir_fold <- as.numeric(str_split(folder_name, "_")[[1]][1])
+        id_this <- as.character(tail(str_split(folder_name, "_")[[1]], n=1)) # id is taken as the last element of the folder name after splitting the string by underscores
+        pred_ion <- as.character(sub("\\..*", "", comp_name[[1]][3]))
+
+        suppressMessages(
+          filedata <- read_delim(paste(folderwithSIRIUSfiles, dir_here, sep = "/"), delim = " ", col_names = FALSE, show_col_types = FALSE)
+        )
+        filedata <- as.data.frame(t(filedata))
+        filedata <- filedata %>%
+          mutate(predion = pred_ion,
+                 id = id_this,
+                 sir_fol_nr = sir_fold,
+                 predform = as.character(sub("\\_.*", "", predion)))
+
+        # pos mode
+        if (grepl("]+", pred_ion, fixed=TRUE)) {
+          fingerprints_data_pos = fingerprints_data_pos %>%
+            bind_rows(filedata)
+        }
+
+        # neg mode
+        if (grepl("]-", pred_ion, fixed=TRUE)) {
+          fingerprints_data_neg = fingerprints_data_neg %>%
+            bind_rows(filedata)
+        }
+      }
+    }
+    ii = ii + 1
+    print(paste0("file: ", ii, "; percentage: ",round(ii/length(all_dirs)*100), sep = ""))
+  }
+
+  if(nrow(fingerprints_data_pos) != 0){
+    colnames(fingerprints_data_pos) <- c(fp_names_pos, "predion", "id", "foldernumber", "predform")
+    fingerprints_data_pos = fingerprints_data_pos %>%
+      select(id, foldernumber, predform, predion, all_of(fp_names_common))
+    fingerprints_data = fingerprints_data %>%
+      bind_rows(fingerprints_data_pos)
+  }
+
+  if(nrow(fingerprints_data_neg) != 0){
+    colnames(fingerprints_data_neg) <- c(fp_names_neg, "predion", "id", "foldernumber", "predform")
+    fingerprints_data_neg = fingerprints_data_neg %>%
+      select(id, foldernumber, predform, predion, all_of(fp_names_common))
+    fingerprints_data = fingerprints_data %>%
+      bind_rows(fingerprints_data_neg)
+  }
+
+  print("Done!")
+
+  return(fingerprints_data)
+
+}
+
 
 #' @export
 MS2Quant_quantify <- function(calibrants_suspects,
@@ -926,25 +1051,40 @@ MS2Quant_quantify <- function(calibrants_suspects,
                               pH_aq = 2.7,
                               NH4 = 0,
                               model = "MS2Quant",
-                              #ionization = "positive",
+                              ionization = "esi_pos",
                               fingerprints = ""){
 
-  # Read in MS2Quant model
-  if (model == "model_PFAS") {
+  # Select the correct model for quantification; default: MS2Quant esi_pos
+  if (model == "model_PFAS" & ionization == "esi_neg") {
     data_list_PFAS <- readRDS("inst/model/230619_logIE_model_withPFAS_allData.RData")
     model_here = data_list_PFAS$model
     type = "PaDEL"
 
-  } else if (model == "PaDEL") {
+  } else if (model == "PaDEL" & ionization == "esi_pos") {
     #data_list_padel <- readRDS(system.file("model", "model_PaDEL_xgbTree_allData.RData", package = "MS2Quant"))
     data_list_padel <- readRDS("inst/model/model_PaDEL_xgbTree_allData.RData")
     model_here = data_list_padel$model
     type = "PaDEL"
 
-  } else if (model == "MS2Quant") {
+  } else if (model == "PaDEL" & ionization == "esi_neg") {
+    #data_list_padel <- readRDS(system.file("model", "240903_neg_PaDEL_xgbTree_allData", package = "MS2Quant"))
+    data_list_padel <- readRDS("inst/model/240903_neg_PaDEL_xgbTree_allData.RData")
+    model_here = data_list_padel$model
+    type = "PaDEL"
+
+  } else if (model == "MS2Quant" & ionization == "esi_pos") {
     data_list_sirius <- readRDS(system.file("model", "model_MS2Quant_xgbTree_allData.RData", package = "MS2Quant"))
     model_here = data_list_sirius$model
     type = "structural"
+
+  } else if (model == "MS2Quant" & ionization == "esi_neg") {
+    #data_list_sirius <- readRDS(system.file("model", "240906_neg_SIRIUS_xgbTree_allData", package = "MS2Quant"))
+    data_list_sirius <- readRDS("inst/model/240906_neg_SIRIUS_xgbTree_allData.RData")
+    model_here = data_list_sirius$model
+    type = "structural"
+  } else {
+    print("Selected model or ionization mode not suitable")
+    return(NULL)
   }
 
 
@@ -1057,14 +1197,18 @@ MS2Quant_quantify <- function(calibrants_suspects,
   ## from SIRIUS results folder
   if (fingerprints != "") {
 
-    if (is.character(fingerprints))
-        suspects_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
-    else
-        suspects_fingerprints_SIRIUS <- fingerprints
+    if (is.character(fingerprints)){
+      suspects_fingerprints_SIRIUS = new_readin_FP_function(fingerprints)
+      #suspects_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
+    } else {
+      suspects_fingerprints_SIRIUS <- fingerprints
+    }
 
     suppressMessages(suspects_unidentified <- suspects_unidentified %>%
       left_join(suspects_fingerprints_SIRIUS %>%
-                  filter(grepl("[M+H]+", predion, fixed = TRUE) | grepl("[M]+", predion, fixed = TRUE)) %>%
+                  filter(case_when(ionization == "esi_pos" ~ (grepl("[M+H]+", predion, fixed = TRUE) | grepl("[M]+", predion, fixed = TRUE)),
+                                   ionization == "esi_neg" ~ (grepl("[M-H]-", predion, fixed = TRUE) | grepl("[M]-", predion, fixed = TRUE)),
+                                   TRUE ~ grepl("?", predion, fixed = TRUE))) %>%
                   rename(identifier = id) %>%
                   mutate(identifier = as.character(identifier))) %>%
       group_by(SMILES) %>%
