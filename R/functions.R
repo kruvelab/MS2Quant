@@ -1077,7 +1077,7 @@ MS2Quant_quantify <- function(calibrants_suspects,
   if (model == "model_PFAS" & ionization == "esi_neg") {
     data_list_padel <- readRDS(system.file("model", "230619_logIE_model_withPFAS_allData.RData", package = "MS2Quant"))
     #data_list_PFAS <- readRDS("inst/model/230619_logIE_model_withPFAS_allData.RData")
-    model_here = data_list_PFAS$model
+    model_here = data_list_padel$model
     type = "PaDEL"
 
   } else if (model == "PaDEL" & ionization == "esi_pos") {
