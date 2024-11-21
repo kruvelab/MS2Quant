@@ -1289,95 +1289,142 @@ MS2Quant_quantify <- function(calibrants_suspects,
   return(data_list)
 }
 
-#' #' @export
-#' MS2Quant_predict_IE <- function(chemicals_for_IE_prediction,
-#'                                 eluent = "",
-#'                                 organic_modifier = "MeCN",
-#'                                 organic_percentage = 80,
-#'                                 pH_aq = 2.7,
-#'                                 type = "structural",
-#'                                 fingerprints = ""){
-#'
-#'   # Read in MS2Quant model
-#'   data_list_sirius <- readRDS(system.file("model", "model_MS2Quant_xgbTree_allData.RData", package = "MS2Quant"))
-#'   MS2Quant = data_list_sirius$model
-#'
-#'   if (is.character(chemicals_for_IE_prediction))
-#'   {
-#'     # read in dataframe with chemicals
-#'     chemicals_for_IE_prediction <- read_delim(chemicals_for_IE_prediction, show_col_types = FALSE)
-#'   }
-#'
-#'   #check if has retention time
-#'   if("retention_time" %in% colnames(chemicals_for_IE_prediction) == F) {
-#'     chemicals_for_IE_prediction = chemicals_for_IE_prediction %>%
-#'       mutate(organic_modifier_percentage = organic_percentage)
-#'   }
-#'
-#'
-#'   # 1) identify the chemicals with and without SMILES
-#'
-#'   chemicals_with_SMILES <- chemicals_for_IE_prediction %>%
-#'     drop_na(SMILES)
-#'
-#'   chemicals_unidentified <- chemicals_for_IE_prediction %>%
-#'     filter(is.na(SMILES))
-#'
-#'   # 1) Get fingerprints for chemicals
-#'
-#'   chemicals_structural_FP = tibble()
-#'
-#'   ## from structure
-#'   if (dim(chemicals_with_SMILES)[1] > 0) {
-#'     chemicals_with_SMILES <- descriptor_calc(chemicals_with_SMILES, type)
-#'
-#'     chemicals_with_SMILES <- chemicals_with_SMILES %>%
-#'       group_by(SMILES) %>%
-#'       mutate(IC = isotopedistribution(SMILES)/100) %>%
-#'       ungroup()
-#'
-#'     chemicals_structural_FP <- chemicals_with_SMILES
-#'
-#'   }
-#'
-#'   ## from SIRIUS results folder
-#'   if (fingerprints != "") {
-#'
-#'     if (is.character(fingerprints))
-#'       chemicals_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
-#'     else
-#'       chemicals_fingerprints_SIRIUS <- fingerprints
-#'
-#'     suppressMessages(chemicals_unidentified <- chemicals_unidentified %>%
-#'                        left_join(chemicals_fingerprints_SIRIUS %>%
-#'                                    filter(grepl("[M+H]+", predion, fixed = TRUE) | grepl("[M]+", predion, fixed = TRUE)) %>%
-#'                                    rename(identifier = id) %>%
-#'                                    mutate(identifier = as.character(identifier))))
-#'
-#'     if(dim(chemicals_structural_FP)[1] > 0) {
-#'       chemicals_structural_FP <- chemicals_structural_FP %>%
-#'         bind_rows(chemicals_unidentified)
-#'     } else {
-#'       chemicals_structural_FP <- chemicals_unidentified
-#'     }
-#'   }
-#'
-#'   # 2) Add eluent composition parameters
-#'
-#'   chemicals_predicted_IEs <- add_mobile_phase_composition(chemicals_structural_FP,
-#'                                                           eluent = eluent,
-#'                                                           organic_modifier = organic_modifier,
-#'                                                           pH_aq = pH_aq)
-#'
-#'   # 3) Predict logIE values with MS2Quant for all chemicals
-#'
-#'   chemicals_predicted_IEs <- chemicals_predicted_IEs %>%
-#'     mutate(pred_logIE = predict(MS2Quant, newdata = chemicals_predicted_IEs)) %>%
-#'     select(colnames(chemicals_for_IE_prediction), pred_logIE)
-#'
-#'
-#'   data_list <-list("chemicals_predicted_IEs" = chemicals_predicted_IEs,
-#'                    "date" = Sys.Date())
-#'
-#'   return(data_list)
-#' }
+
+
+
+
+
+#' @export
+MS2Quant_predict_IE <- function(chemicals_for_IE_prediction,
+                                eluent = "",
+                                organic_modifier = "MeCN",
+                                organic_percentage = 80,
+                                pH_aq = 2.7,
+                                NH4 = 0,
+                                model = "MS2Quant",
+                                ionization = "esi_pos",
+                                fingerprints = ""){
+
+
+  # Select the correct model for quantification; default: MS2Quant esi_pos
+  if (model == "model_PFAS" & ionization == "esi_neg") {
+    data_list_padel <- readRDS(system.file("model", "230619_logIE_model_withPFAS_allData.RData", package = "MS2Quant"))
+    #data_list_PFAS <- readRDS("inst/model/230619_logIE_model_withPFAS_allData.RData")
+    model_here = data_list_padel$model
+    type = "PaDEL"
+
+  } else if (model == "PaDEL" & ionization == "esi_pos") {
+    data_list_padel <- readRDS(system.file("model", "model_PaDEL_xgbTree_allData.RData", package = "MS2Quant"))
+    #data_list_padel <- readRDS("inst/model/model_PaDEL_xgbTree_allData.RData")
+    model_here = data_list_padel$model
+    type = "PaDEL"
+
+  } else if (model == "PaDEL" & ionization == "esi_neg") {
+    data_list_padel <- readRDS(system.file("model", "240903_neg_PaDEL_xgbTree_allData.RData", package = "MS2Quant"))
+    #data_list_padel <- readRDS("inst/model/240903_neg_PaDEL_xgbTree_allData.RData")
+    model_here = data_list_padel$model
+    type = "PaDEL"
+
+  } else if (model == "MS2Quant" & ionization == "esi_pos") {
+    data_list_sirius <- readRDS(system.file("model", "model_MS2Quant_xgbTree_allData.RData", package = "MS2Quant"))
+    model_here = data_list_sirius$model
+    type = "structural"
+
+  } else if (model == "MS2Quant" & ionization == "esi_neg") {
+    data_list_sirius <- readRDS(system.file("model", "240906_neg_SIRIUS_xgbTree_allData.RData", package = "MS2Quant"))
+    #data_list_sirius <- readRDS("inst/model/240906_neg_SIRIUS_xgbTree_allData.RData")
+    model_here = data_list_sirius$model
+    type = "structural"
+  } else {
+    print("Selected model or ionization mode not suitable")
+    return(NULL)
+  }
+
+
+  if (is.character(chemicals_for_IE_prediction))
+  {
+    # read in dataframe with chemicals
+    chemicals_for_IE_prediction <- read_delim(chemicals_for_IE_prediction, show_col_types = FALSE)
+  }
+
+  #check if has retention time
+  if("retention_time" %in% colnames(chemicals_for_IE_prediction) == F) {
+    chemicals_for_IE_prediction = chemicals_for_IE_prediction %>%
+      mutate(organic_modifier_percentage = organic_percentage)
+  }
+
+
+  # 1) identify the chemicals with and without SMILES
+
+  chemicals_with_SMILES <- chemicals_for_IE_prediction %>%
+    drop_na(SMILES)
+
+  chemicals_unidentified <- chemicals_for_IE_prediction %>%
+    filter(is.na(SMILES))
+
+  # 1) Get fingerprints for chemicals
+
+  chemicals_structural_FP = tibble()
+
+  ## from structure
+  if (dim(chemicals_with_SMILES)[1] > 0) {
+    chemicals_with_SMILES <- descriptor_calc(chemicals_with_SMILES, type)
+
+    chemicals_with_SMILES <- chemicals_with_SMILES %>%
+      group_by(SMILES) %>%
+      mutate(IC = isotopedistribution(SMILES)/100) %>%
+      ungroup()
+
+    chemicals_structural_FP <- chemicals_with_SMILES
+
+  }
+
+  ## from SIRIUS results folder
+  if (fingerprints != "" & type != "PaDEL") {
+
+    if (is.character(fingerprints))
+      chemicals_fingerprints_SIRIUS <- FpTableForPredictions(fingerprints)
+    else
+      chemicals_fingerprints_SIRIUS <- fingerprints
+
+    suppressMessages(chemicals_unidentified <- chemicals_unidentified %>%
+                       left_join(chemicals_fingerprints_SIRIUS %>%
+                                   filter(case_when(ionization == "esi_pos" ~ (grepl("[M+H]+", predion, fixed = TRUE) | grepl("[M]+", predion, fixed = TRUE)),
+                                                    ionization == "esi_neg" ~ (grepl("[M-H]-", predion, fixed = TRUE) | grepl("[M]-", predion, fixed = TRUE)),
+                                                    TRUE ~ grepl("?", predion, fixed = TRUE))) %>%
+                                   rename(identifier = id) %>%
+                                   mutate(identifier = as.character(identifier))))
+
+    if(dim(chemicals_structural_FP)[1] > 0) {
+      chemicals_structural_FP <- chemicals_structural_FP %>%
+        bind_rows(chemicals_unidentified)
+    } else {
+      chemicals_structural_FP <- chemicals_unidentified
+    }
+  }
+
+  # 2) Add eluent composition parameters
+
+  chemicals_predicted_IEs <- add_mobile_phase_composition(chemicals_structural_FP,
+                                                          eluent = eluent,
+                                                          organic_modifier = organic_modifier,
+                                                          pH_aq = pH_aq,
+                                                          NH4 = NH4)
+
+  if(model == "model_PFAS") {
+    calibrants_structural_FP = calibrants_structural_FP %>%
+      rename(pH.aq. = pH_aq)
+  }
+
+  # 3) Predict logIE values with model_here for all chemicals
+
+  chemicals_predicted_IEs <- chemicals_predicted_IEs %>%
+    mutate(pred_logIE = predict(model_here, newdata = chemicals_predicted_IEs)) %>%
+    select(colnames(chemicals_for_IE_prediction), pred_logIE)
+
+
+  data_list <-list("chemicals_predicted_IEs" = chemicals_predicted_IEs,
+                   "date" = Sys.Date())
+
+  return(data_list)
+}
