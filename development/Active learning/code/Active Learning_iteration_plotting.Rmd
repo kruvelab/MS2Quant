@@ -1,0 +1,461 @@
+---
+title: "Iteration"
+output: html_document
+date: "2024-05-16"
+---
+
+```{r setup, include = FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE)
+
+opts_knit$set(root.dir = "C:/Users/wewa7216/OneDrive - Kruvelab/Desktop/PhD Wei-Chieh/WP_Active_Learning/Result_rescale")
+```
+
+## Data preparation
+```{r}
+
+Data_unknown_space <- read.csv("Data_unknown_space_unscaled.csv")
+Data_known_space <- read.csv("Data_known_space_unscaled.csv")
+
+## The cleaning function uses name, SMILES, and data_type as anchor to bind the dataset
+columns_removed_from_cleaning = c("comID", "logIE", "pH.aq.", "polarity_index",
+                                  "viscosity", "surface_tension", "NH4", "Price")
+## The scaling function do not need any anchors
+columns_removed_from_scaling = c("comID", "name", "SMILES", "logIE", "pH.aq.", "polarity_index", "viscosity", "surface_tension", "NH4", "data_type", "Price")
+
+target_class = c("Natural product", "Environmental contaminant", "PCB", "PFAS", "non-PFAS")
+target_algo = c("Random", "Clustering", "Uncertainty", "Anticlustering", "Mix")
+
+color_palette <- c(
+  "#131AC3", "#FC9348", "#34DFD2", "#D787C8", "#998425", "#f9e858", "#70573C", "#9B2226", "#4E342E", "#008080",
+  "#2E7D32", "#0288D1", "#FF8A80", "#880E4F", "#FFC107", "#7B1FA2", "#FFEB3B", "#D81B60", "#4CAF50", "#F44336",
+  "#E91E63", "#9C27B0", "#2196F3", "#009688", "#FF5722", "#795548", "#673AB7", "#00BCD4", "#FF9800", "#CDDC39",
+  "#B0BEC5", "#607D8B", "#C2185B", "#8BC34A", "#512DA8", "#FFD600", "#B71C1C", "#C5E1A5", "#0097A7", "#F57F17", 
+  "#00C853", "#E9D8A6", "#3D5AFE", "#AEEA00", "#303F9F")
+
+sampling_number = 20
+iteration_number = 15
+reproduce_number = 10
+sampling_number_list = c(1, 5, 10, 15, 20)
+
+saving_root = paste0("Sampling_", sampling_number, "/")
+Prediction_error_it0 <- read.csv(paste0(saving_root, "Result_Iteration_0.csv"))
+Prediction_error_it0 <- as.list(Prediction_error_it0[1,])
+```
+#-----------------------------------
+
+## Original performance of the model
+```{r}
+##-----prediction error before active learning
+Data_neg_mix <- read.csv("Data_neg_standards_unscaled.csv")
+Prediction_error_it0 = list()
+
+for (reproduce_index in 1 : reproduce_number) {
+  
+  writeLines(paste0("Reproduce: ", reproduce_index))
+  
+  ##--------Train test splitting
+  ## only the test set is scaled
+  set.seed(reproduce_index * 100 + 1)
+  
+  Data_unknown_space_test <- Data_unknown_space %>%
+    group_by(data_type) %>%
+    sample_frac(.2) %>%
+    ungroup()
+
+  Data_unknown_space_train <- Data_unknown_space[!(Data_unknown_space$comID %in%
+                                                     Data_unknown_space_test$comID), ]
+
+  Data_known_space_cleaned <- cleaning_combine(Data_known_space,
+                                               columns_removed_from_cleaning)
+  Data_unknown_space_test_it0 = Data_unknown_space_test[, colnames(Data_known_space_cleaned)]
+  
+  scaling_result_it0 = scaling_combine(Data_known_space_cleaned, columns_removed_from_scaling)
+  
+  Data_known_space_it0 <- scaling_result_it0[[1]]
+  Data_unknown_space_test_it0 <- scaling_combine(Data_unknown_space_test_it0,
+                                                 columns_removed_from_scaling,
+                                                 center = scaling_result_it0[[2]],
+                                                 scale = scaling_result_it0[[3]])[[1]]
+
+  ## only predict the IE values for test set
+  New_prediction_it0 <- logIE_prediction(Data_known_space_it0,
+                                         Data_unknown_space_test_it0,
+                                         reproduce_index, iteration_index = 0, algo = "",
+                                         saving_root = paste0("It_0/"))
+  
+  Prediction_error_it0[reproduce_index] <- error_computation_RMSE_pool(Data_unknown_space_test_it0, New_prediction_it0)
+
+}
+write.csv(Prediction_error_it0, file = paste0(saving_root, "Result_Iteration_0.csv"), row.names = F)
+```
+#-----------------------------------
+
+## Active Learning - Random
+```{r}
+df_random_result = tibble(iteration = 0 : iteration_number,
+                          proportion = round((iteration * sampling_number / dim(Data_unknown_space)[1] * 0.8) * 100, 2))
+df_random_sampling_info = list()
+df_random_prediction_results = list()
+
+##-----obtain data from the original new chemical space data set
+for (reproduce_index in 1 : reproduce_number) {
+  
+  ## random
+  random_iteration_error = active_learning(Data_known_space,
+                                           Data_unknown_space,
+                                           sampling_number,
+                                           columns_removed_from_cleaning,
+                                           columns_removed_from_scaling,
+                                           iteration_number,
+                                           reproduce_index,
+                                           algo = "Random",
+                                           saving_root,
+                                           test = 1)
+  
+  iteration_error <- random_iteration_error[[1]]
+  
+  real_its <- nrow(iteration_error) - 1
+  N <- iteration_number - real_its
+  supplement_list <- as.list(rep(-1, N))
+
+  df_random_result <- df_random_result %>%
+    mutate(!!sym(paste0("Reproduce_", reproduce_index)) := unlist(c(Prediction_error_it0[reproduce_index],
+                                                                    iteration_error[2 : (real_its + 1), 3],
+                                                                    supplement_list)))
+  
+  df_random_sampling_info[[reproduce_index]] = random_iteration_error[[1]]
+  df_random_prediction_results[[reproduce_index]] = random_iteration_error[[2]]
+}
+
+df_random_result <- df_random_result %>%
+  mutate(across(starts_with("Reproduce"), as.numeric)) %>%
+  rowwise() %>%
+  mutate(mean_error = mean(c_across(starts_with("Reproduce")), na.rm = TRUE),
+         std_error = sd(c_across(starts_with("Reproduce")), na.rm = TRUE))
+
+write.csv(df_random_result, file = paste0(saving_root, "Result_random.csv"), row.names = F)
+write.csv(df_random_sampling_info, file = paste0(saving_root, "Sampling_info_random.csv"), row.names = F)
+write.csv(df_random_prediction_results, file = paste0(saving_root, "Prediction_random.csv"), row.names = F)
+
+df_random_result <- read.csv(file = r"(C:\Users\wewa7216\OneDrive - Kruvelab\Desktop\PhD Wei-Chieh\WP_Active_Learning\Result_external\Sampling_20/Result_Random - Copy.csv)")
+##------plot the result
+random_plot <- ggplot(data = df_random_result, aes(x = proportion, y = mean_error)) +
+  ggtitle("Random sampling") +
+  geom_line(alpha = 0.8, linewidth = 0.8, color = color_palette[1]) +
+  geom_point(size = 1.5, color = color_palette[1]) +
+  geom_ribbon(aes(ymin = mean_error - (std_error / sqrt(reproduce_number)),
+                  ymax = mean_error + (std_error / sqrt(reproduce_number))),
+              fill = color_palette[1], alpha = 0.3) +
+  xlab("proportion (%)") +
+  ylab("RMSE") +
+  plot_theme() +
+  theme(axis.title.y = element_text(angle = 90),
+        plot.title = element_text(hjust = 0.5))
+random_plot
+```
+#-----------------------------------
+
+## Active Learning - Clustering
+```{r}
+df_clustering_result = tibble(iteration = 0 : iteration_number,
+                              proportion = round((iteration * sampling_number / dim(Data_unknown_space)[1] * 0.8) * 100, 2))
+df_clustering_sampling_info = list()
+df_clustering_prediction_results = list()
+for (reproduce_index in 1 : reproduce_number) {
+  ## clustering
+  clustering_iteration_error = active_learning(Data_known_space,
+                                               Data_unknown_space,
+                                               sampling_number,
+                                               columns_removed_from_cleaning,
+                                               columns_removed_from_scaling,
+                                               iteration_number,
+                                               reproduce_index,
+                                               algo = "Clustering",
+                                               saving_root)
+  
+  iteration_error = clustering_iteration_error[[1]]
+  
+  real_its <- nrow(iteration_error) - 1
+  N <- iteration_number - real_its
+  supplement_list <- as.list(rep(-1, N))
+
+  df_clustering_result <- df_clustering_result %>%
+    mutate(!!sym(paste0("Reproduce_", reproduce_index)) := unlist(c(Prediction_error_it0[reproduce_index],
+                                                                    iteration_error[2 : (real_its + 1), 3],
+                                                                    supplement_list)))
+  
+  df_clustering_sampling_info[[reproduce_index]] = clustering_iteration_error[[1]]
+  df_clustering_prediction_results[[reproduce_index]] = clustering_iteration_error[[2]]
+}
+
+df_clustering_result <- df_clustering_result %>%
+  mutate(across(starts_with("Reproduce"), as.numeric)) %>%
+  rowwise() %>%
+  mutate(mean_error = mean(c_across(starts_with("Reproduce")), na.rm = TRUE),
+         std_error = sd(c_across(starts_with("Reproduce")), na.rm = TRUE))
+
+write.csv(df_clustering_result, file = paste0(saving_root, "Result_clustering.csv"), row.names = F)
+write.csv(df_clustering_sampling_info, file = paste0(saving_root, "Sampling_info_clustering.csv"), row.names = F)
+write.csv(df_clustering_prediction_results, file = paste0(saving_root, "Prediction_clustering.csv"), row.names = F)
+
+df_clustering_result <- read.csv(file = paste0(saving_root, "Result_clustering.csv"))
+
+clustering_plot <- ggplot(data = df_clustering_result, aes(x = proportion, y = mean_error)) +
+  ggtitle("Clustering sampling") +
+  geom_line(alpha = 0.8, linewidth = 0.8, color = color_palette[2]) +
+  geom_point(size = 1.5, color = color_palette[2]) +
+  geom_ribbon(aes(ymin = mean_error - (std_error / sqrt(reproduce_number)),
+                  ymax = mean_error + (std_error / sqrt(reproduce_number))),
+              fill = color_palette[2], alpha = 0.5) +
+  xlab("proportion (%)") +
+  ylab("RMSE") +
+  plot_theme() +
+  theme(axis.title.y = element_text(angle = 90),
+        plot.title = element_text(hjust = 0.5))
+clustering_plot
+```
+#-----------------------------------
+
+## Active Learning - Uncertainty
+```{r}
+df_uncertainty_result = tibble(iteration = 0 : iteration_number,
+                               proportion = round((iteration * sampling_number / dim(Data_unknown_space)[1] * 0.8) * 100, 2))
+df_uncertainty_sampling_info = list()
+df_uncertainty_prediction_results = list()
+##-----obtain data from the original new chemical space data set
+for (reproduce_index in 1 : reproduce_number) {
+  ## uncertainty
+  uncertainty_iteration_error = active_learning(Data_known_space,
+                                                Data_unknown_space,
+                                                sampling_number,
+                                                columns_removed_from_cleaning,
+                                                columns_removed_from_scaling,
+                                                iteration_number,
+                                                reproduce_index,
+                                                algo = "Uncertainty",
+                                                saving_root)
+  
+  iteration_error = uncertainty_iteration_error[[1]]
+  
+  real_its <- nrow(iteration_error) - 1
+  N <- iteration_number - real_its
+  supplement_list <- as.list(rep(-1, N))
+  
+
+  df_uncertainty_result <- df_uncertainty_result %>%
+    mutate(!!sym(paste0("Reproduce_", reproduce_index)) := unlist(c(Prediction_error_it0[reproduce_index],
+                                                                    iteration_error[2 : (real_its + 1), 3],
+                                                                    supplement_list)))
+
+  df_uncertainty_sampling_info[[reproduce_index]] = uncertainty_iteration_error[[1]]
+  df_uncertainty_prediction_results[[reproduce_index]] = uncertainty_iteration_error[[2]]
+}
+df_uncertainty_result <- df_uncertainty_result %>%
+  mutate(across(starts_with("Reproduce"), as.numeric)) %>%
+  rowwise() %>%
+  mutate(mean_error = mean(c_across(starts_with("Reproduce")), na.rm = TRUE),
+         std_error = sd(c_across(starts_with("Reproduce")), na.rm = TRUE))
+
+write.csv(df_uncertainty_result, file = paste0(saving_root, "Result_uncertainty.csv"), row.names = F)
+write.csv(df_uncertainty_sampling_info, file = paste0(saving_root, "Sampling_info_uncertainty.csv"), row.names = F)
+write.csv(df_uncertainty_prediction_results, file = paste0(saving_root, "Prediction_uncertainty.csv"), row.names = F)
+
+uncertainty_plot <- ggplot(data = df_uncertainty_result, aes(x = proportion, y = mean_error)) +
+  ggtitle("Uncertainty sampling") +
+  geom_line(alpha = 0.8, linewidth = 0.8, color = color_palette[3]) +
+  geom_point(size = 1.5, color = color_palette[3]) +
+  geom_ribbon(aes(ymin = mean_error - (std_error / sqrt(reproduce_number)),
+                  ymax = mean_error + (std_error / sqrt(reproduce_number))),
+              fill = color_palette[3], alpha = 0.5) +
+  xlab("proportion (%)") +
+  ylab("RMSE") +
+  plot_theme() +
+  theme(axis.title.y = element_text(angle = 90),
+        plot.title = element_text(hjust = 0.5))
+uncertainty_plot
+```
+#-----------------------------------
+
+## Active Learning - Anti-clustering
+```{r}
+df_anticlus_result = tibble(iteration = 0 : iteration_number,
+                            proportion = round((iteration * sampling_number / dim(Data_unknown_space)[1] * 0.8) * 100, 2))
+df_anticlus_sampling_info = list()
+df_anticlus_prediction_results = list()
+for (reproduce_index in 1 : reproduce_number) {
+  
+  ## anticlustering
+  anticlus_iteration_error = active_learning(Data_known_space,
+                                             Data_unknown_space,
+                                             sampling_number,
+                                             columns_removed_from_cleaning,
+                                             columns_removed_from_scaling,
+                                             iteration_number,
+                                             reproduce_index,
+                                             algo = "Anticlustering",
+                                             saving_root)
+  
+  iteration_error = anticlus_iteration_error[[1]]
+  
+  real_its <- nrow(iteration_error) - 1
+  N <- iteration_number - real_its
+  supplement_list <- as.list(rep(-1, N))
+
+  df_anticlus_result <- df_anticlus_result %>%
+    mutate(!!sym(paste0("Reproduce_", reproduce_index)) := unlist(c(Prediction_error_it0[reproduce_index],
+                                                                    iteration_error[2 : (real_its + 1), 3],
+                                                                    supplement_list)))
+
+  df_anticlus_sampling_info[[reproduce_index]] = anticlus_iteration_error[[1]]
+  df_anticlus_prediction_results[[reproduce_index]] = anticlus_iteration_error[[2]]
+}
+df_anticlus_result <- df_anticlus_result %>%
+  mutate(across(starts_with("Reproduce"), as.numeric)) %>%
+  rowwise() %>%
+  mutate(mean_error = mean(c_across(starts_with("Reproduce")), na.rm = TRUE),
+         std_error = sd(c_across(starts_with("Reproduce")), na.rm = TRUE))
+
+write.csv(df_anticlus_result, file = paste0(saving_root, "Result_anticlustering.csv"), row.names = F)
+write.csv(df_anticlus_sampling_info, file = paste0(saving_root, "Sampling_info_anticlustering.csv"), row.names = F)
+write.csv(df_anticlus_prediction_results, file = paste0(saving_root, "Prediction_anticlustering.csv"), row.names = F)
+
+anticlus_plot <- ggplot(data = df_anticlus_result, aes(x = proportion, y = mean_error)) +
+  ggtitle("Anti-clustering sampling") +
+  geom_line(alpha = 0.8, linewidth = 0.8, color = color_palette[4]) +
+  geom_point(size = 1.5, color = color_palette[4]) +
+  geom_ribbon(aes(ymin = mean_error - (std_error / sqrt(reproduce_number)),
+                  ymax = mean_error + (std_error / sqrt(reproduce_number))),
+              fill = color_palette[4], alpha = 0.5) +
+  xlab("proportion (%)") +
+  ylab("RMSE") +
+  plot_theme() +
+  theme(axis.title.y = element_text(angle = 90),
+        plot.title = element_text(hjust = 0.5))
+anticlus_plot
+```
+#-----------------------------------
+
+## Active Learning - Mixing
+```{r}
+df_mix_result = tibble(iteration = 0 : iteration_number,
+                       proportion = round((iteration * sampling_number / dim(Data_unknown_space)[1] * 0.8) * 100, 2))
+df_mix_sampling_info = list()
+df_mix_prediction_results = list()
+##-----obtain data from the original new chemical space data set
+for (reproduce_index in 1 : reproduce_number) {
+  ## mixing
+  mixing_iteration_error = active_learning(Data_known_space,
+                                           Data_unknown_space,
+                                           sampling_number,
+                                           columns_removed_from_cleaning,
+                                           columns_removed_from_scaling,
+                                           iteration_number,
+                                           reproduce_index,
+                                           algo = "Mix",
+                                           saving_root)
+  
+  iteration_error = mixing_iteration_error[[1]]
+  
+  real_its <- nrow(iteration_error) - 1
+  N <- iteration_number - real_its
+  supplement_list <- as.list(rep(-1, N))
+
+  df_mix_result <- df_mix_result %>%
+    mutate(!!sym(paste0("Reproduce_", reproduce_index)) := unlist(c(Prediction_error_it0[reproduce_index],
+                                                                    iteration_error[2 : (real_its + 1), 3],
+                                                                    supplement_list)))
+  
+  df_mix_sampling_info[[reproduce_index]] = mixing_iteration_error[[1]]
+  df_mix_prediction_results[[reproduce_index]] = mixing_iteration_error[[2]]
+}
+
+df_mix_result <- df_mix_result %>%
+  mutate(across(starts_with("Reproduce"), as.numeric)) %>%
+  rowwise() %>%
+  mutate(mean_error = mean(c_across(starts_with("Reproduce")), na.rm = TRUE),
+         std_error = sd(c_across(starts_with("Reproduce")), na.rm = TRUE))
+
+write.csv(df_mix_result, file = paste0(saving_root, "Result_mix.csv"), row.names = F)
+write.csv(df_mix_sampling_info, file = paste0(saving_root, "Sampling_info_mix.csv"), row.names = F)
+write.csv(df_mix_prediction_results, file = paste0(saving_root, "Prediction_mix.csv"), row.names = F)
+
+mixing_plot <- ggplot(data = df_mix_result, aes(x = proportion, y = mean_error)) +
+  ggtitle("Mixing sampling") +
+  geom_line(alpha = 0.8, linewidth = 0.8, color = color_palette[5]) +
+  geom_point(size = 1.5, color = color_palette[5]) +
+  geom_ribbon(aes(ymin = mean_error - (std_error / sqrt(reproduce_number)),
+                  ymax = mean_error + (std_error / sqrt(reproduce_number))),
+              fill = color_palette[5], alpha = 0.5) +
+  xlab("proportion (%)") +
+  ylab("RMSE") +
+  plot_theme() +
+  theme(axis.title.y = element_text(angle = 90),
+        plot.title = element_text(hjust = 0.5))
+mixing_plot
+```
+#-----------------------------------
+
+## Cost computation
+```{r}
+df_cost_result = tibble(iteration = 0 : iteration_number,
+                        proportion = round((iteration * sampling_number / dim(Data_unknown_space)[1] * 0.8) * 100, 2))
+df_cost_sampling_info = list()
+df_cost_prediction_results = list()
+
+##-----obtain data from the original new chemical space data set
+for (reproduce_index in 1 : reproduce_number) {
+  
+  ## cost
+  cost_iteration_error = active_learning(Data_known_space,
+                                           Data_unknown_space,
+                                           sampling_number,
+                                           columns_removed_from_cleaning,
+                                           columns_removed_from_scaling,
+                                           iteration_number,
+                                           reproduce_index,
+                                           algo = "Cost",
+                                           saving_root)
+  
+  iteration_error <- cost_iteration_error[[1]]
+  
+  real_its <- nrow(iteration_error) - 1
+  N <- iteration_number - real_its
+  supplement_list <- as.list(rep(-1, N))
+
+  df_cost_result <- df_cost_result %>%
+    mutate(!!sym(paste0("Reproduce_", reproduce_index)) := unlist(c(Prediction_error_it0[reproduce_index],
+                                                                    iteration_error[2 : (real_its + 1), 3],
+                                                                    supplement_list)))
+  
+  df_cost_sampling_info[[reproduce_index]] = cost_iteration_error[[1]]
+  df_cost_prediction_results[[reproduce_index]] = cost_iteration_error[[2]]
+}
+
+df_cost_result <- df_cost_result %>%
+  mutate(across(starts_with("Reproduce"), as.numeric)) %>%
+  rowwise() %>%
+  mutate(mean_error = mean(c_across(starts_with("Reproduce")), na.rm = TRUE),
+         std_error = sd(c_across(starts_with("Reproduce")), na.rm = TRUE))
+
+write.csv(df_cost_result, file = paste0(saving_root, "Result_Cost.csv"), row.names = F)
+write.csv(df_cost_sampling_info, file = paste0(saving_root, "Sampling_info_cost.csv"), row.names = F)
+write.csv(df_cost_prediction_results, file = paste0(saving_root, "Prediction_cost.csv"), row.names = F)
+
+#df_random_result <- read.csv(file = "Sampling_3/Result_Random.csv")
+##------plot the result
+random_plot <- ggplot(data = df_cost_result, aes(x = proportion, y = mean_error)) +
+  ggtitle("Cost analysis") +
+  geom_line(alpha = 0.8, linewidth = 0.8, color = color_palette[1]) +
+  geom_point(size = 1.5, color = color_palette[1]) +
+  geom_ribbon(aes(ymin = mean_error - (std_error / sqrt(reproduce_number)),
+                  ymax = mean_error + (std_error / sqrt(reproduce_number))),
+              fill = color_palette[1], alpha = 0.3) +
+  xlab("proportion (%)") +
+  ylab("RMSE") +
+  plot_theme() +
+  theme(axis.title.y = element_text(angle = 90),
+        plot.title = element_text(hjust = 0.5))
+random_plot
+```
+#-----------------------------------

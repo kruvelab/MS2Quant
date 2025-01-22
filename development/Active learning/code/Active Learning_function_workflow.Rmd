@@ -1,0 +1,770 @@
+---
+title: "Active learning function"
+output: pdf_document
+date: "2024-03-26"
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "C:/Users/wewa7216/OneDrive - Kruvelab/Desktop/PhD Wei-Chieh/Active_Learning/Result_rescale")
+
+## for function and active learning
+library(tidyverse)
+library(anticlust)
+library(dplyr)
+library(rJava)
+library(rjson)
+library(readr)
+library(caret)
+library(stats)
+library(rfinterval)
+library(caTools)
+library(rcdk)
+library(xgboost)
+library(Metrics)
+
+## plotting
+library(umap)
+library(ellipse)
+library(ggplot2)
+library(ggpubr)
+library(ggbeeswarm)
+library(ggrepel)
+```
+
+## Cleaning function
+```{r}
+cleaning_data = function(data,
+                         nearZeroVar_freqCut = 80/20,
+                         highlyCorrelated_cutoff = 0.75) {
+  data = data %>%
+    drop_na()
+  name = data %>%
+    select(name)
+  data_type = data %>%
+    select(data_type)
+  smiles = data %>%
+    select(SMILES)
+  # Removing columns with missing values
+  data = data %>%
+    dplyr::select(-c(SMILES, name, data_type)) %>%
+    select_if(~ sum(is.na(.))< 10,)
+  
+  
+  # Checking that any of the categorical values would not have more than 80% of existing/non-existing values
+  data = data %>%
+    select(-c(nearZeroVar(data,
+                          freqCut = nearZeroVar_freqCut)))
+  
+  # Removing columns that are correlated to each other
+  correlationMatrix <- cor(data, use = "complete.obs")
+  highlyCorrelated <- findCorrelation(correlationMatrix,
+                                      cutoff = highlyCorrelated_cutoff)
+  
+  data <- data %>%
+    dplyr::select(-highlyCorrelated) %>%
+    bind_cols(name) %>%
+    bind_cols(data_type) %>%
+    bind_cols(smiles)
+  
+  return(data)
+}
+```
+## ---------------------------
+
+## Cleaning and combine the origianl line
+```{r}
+cleaning_combine <- function(Data_for_cleaning,
+                             columns_removed_from_cleaning) {
+  
+  Data_cleaned <- cleaning_data(Data_for_cleaning %>%
+                                  select(-columns_removed_from_cleaning))
+  
+  Data_cleaned <- cbind(Data_for_cleaning %>%
+                          select(columns_removed_from_cleaning),
+                        Data_cleaned) %>%
+    select(colnames(Data_for_cleaning)[1:10], everything())
+  
+  return(Data_cleaned)
+}
+```
+## ---------------------------
+
+## Scaling and combine the origianl line
+```{r}
+scaling_combine <- function(Data_for_scaling,
+                            columns_removed_from_scaling,
+                            center = TRUE,
+                            scale = TRUE) {
+  
+  return_list = list()
+
+  Data_scaled <- scale(Data_for_scaling %>%
+                         select(-columns_removed_from_scaling),
+                       center = center,
+                       scale = scale)
+  
+  return_list[[2]] <- attr(Data_scaled, "scaled:center")
+  return_list[[3]] <- attr(Data_scaled, "scaled:scale")
+  
+  all_nan_cols <- apply(Data_scaled, 2, function(col) all(is.na(col)))
+  Data_scaled[, all_nan_cols] <- 0
+  
+  return_list[[1]] <- cbind(Data_for_scaling %>%
+                          select(columns_removed_from_scaling),
+                        as.data.frame(Data_scaled)) %>%
+    select(colnames(Data_for_scaling)[1:10], everything())
+
+  return(return_list)
+}
+```
+## ---------------------------
+
+## Training logIE model
+```{r}
+training_logIE_pred_model = function(data,
+                                     folds = 5,
+                                     fitControlMethod = "boot",
+                                     method = "xgbTree",
+                                     bestTune_optimized_model = NULL,
+                                     split = NULL,
+                                     save_model_name = NULL) {
+  set.seed(1111)
+  if (!is.null(split)) {
+    if(split == 1) {
+      training_set = data
+    } else {
+    training_set = tibble()
+    test_set = tibble()
+    for (data_type_this in levels(factor(data$data_type))) {
+      suppressMessages({
+      data_this = data %>%
+        filter(data_type == data_type_this)
+      name = data_this %>% select(name) %>% unique()
+      split_train_test = sample.split(name$name, SplitRatio = split)
+      name = name %>% mutate(split_train_test = split_train_test)
+      data_this = data_this %>%
+        left_join(name)
+      training_set = training_set %>%
+        bind_rows(data_this %>%
+                    filter(split_train_test)) %>%
+        select(-split_train_test)
+      test_set = test_set %>%
+        bind_rows(data_this %>%
+                    filter(!split_train_test)) %>%
+        select(-split_train_test)
+      })
+      }
+    }
+      set.seed(1111)
+      folds = groupKFold(training_set$name, k = folds)
+      fitControl <- trainControl(method = fitControlMethod, index = folds)
+      set.seed(1111)
+      model <- train(logIE ~ .,
+                     data = training_set %>% select(-comID, -name, -data_type, -SMILES, -Price),
+                     method = method,
+                     trControl = fitControl,
+                     verbosity = 0)
+  } else {
+    training_set = data
+
+    grid_optimized <- expand.grid(
+      nrounds = bestTune_optimized_model$nrounds,
+      max_depth = bestTune_optimized_model$max_depth,
+      eta = bestTune_optimized_model$eta,
+      gamma = bestTune_optimized_model$gamma,
+      colsample_bytree = bestTune_optimized_model$colsample_bytree,
+      min_child_weight = bestTune_optimized_model$min_child_weight,
+      subsample = bestTune_optimized_model$subsample
+    )
+
+    fitControl <- caret::trainControl(
+      method = "none"
+    )
+    
+    set.seed(1111)
+    model <- train(logIE ~ .,
+                   method = method,
+                   data = training_set %>% select(-comID, -name, -data_type, -SMILES, -Price),
+                   trControl = fitControl,
+                   tuneGrid = grid_optimized,
+                   verbosity = 0)
+  }
+
+  training_set <- training_set %>%
+    mutate(logIE_predicted = predict(model, newdata = training_set))
+
+  RMSE_training_set = rmse(training_set$logIE, training_set$logIE_predicted)
+
+  ## Determining most influential descriptors ----
+  variable_importance <- varImp(model)
+  variable_importance <- as.data.frame(variable_importance$importance)
+
+  data = list("training_set" = training_set)
+  metrics = list("RMSE_training_set" = RMSE_training_set)
+
+  if (!is.null(save_model_name)) {
+    saveRDS(model,paste0(save_model_name,".RData", sep =""))
+  }
+
+  if (!is.null(split)) {
+    if(split != 1) {
+      test_set <- test_set %>%
+      mutate(logIE_predicted = predict(model, newdata = test_set))
+    RMSE_test_set = rmse(test_set$logIE, test_set$logIE_predicted)
+
+    data = list("training_set" = training_set,
+                "test_set" = test_set)
+    metrics = list("RMSE_training_set" = RMSE_training_set,
+                   "RMSE_test_set" = RMSE_test_set)
+    }
+  }
+
+  model = list("model" = model,
+               "data" = data,
+               "metrics" = metrics,
+               "variable_importance" = variable_importance)
+  return(model)
+}
+```
+## ---------------------------
+
+## Prediction generation
+```{r}
+logIE_prediction <- function(Data_training, Data_for_prediction, 
+                             reproduce_index, iteration_index, algo, saving_root){
+  
+  # obtain the new model
+  suppressWarnings({
+    logIE_pred_model = training_logIE_pred_model(data = Data_training,
+                                                 folds = 5,
+                                                 split = 0.8)
+    
+    logIE_pred_model = training_logIE_pred_model(data = Data_training,
+                                                 bestTune_optimized_model = logIE_pred_model$model$bestTune,
+                                                 split = NULL)
+  })
+  file_name_model <- paste0(saving_root, algo, "/Model/Run_", reproduce_index, "_iteration_", iteration_index, ".rds")
+  saveRDS(logIE_pred_model, file_name_model)
+  
+  file_name_training <- paste0(saving_root, algo, "/VI/Run_", reproduce_index, "_iteration_", iteration_index, ".csv")
+  df_VI <- logIE_pred_model$variable_importance %>% 
+    mutate(VI = rownames(logIE_pred_model$variable_importance), .before = 1)
+  write.csv(df_VI, file_name_training, row.names = F)
+  #generate the prediction from the model
+  logIE_prediction = predict(logIE_pred_model$model, newdata = Data_for_prediction)
+  return (logIE_prediction)
+  }
+```
+## ---------------------------
+
+## Error computation (pooled RMES)
+```{r}
+error_computation_RMSE_pool <- function(logIE_data, logIE_prediction){
+  
+  rmse_pool = list()
+  
+  for (category in logIE_data$data_type %>% unique()){
+    rmse = rmse(logIE_data[logIE_data$data_type == category,]$logIE, logIE_prediction[logIE_data$data_type == category])
+    rmse_pool[category] = rmse
+  }
+  
+  rmse_sum <- sum(unlist(rmse_pool)^2) / length(logIE_data$data_type %>% unique())
+  rmse_root <- sqrt(rmse_sum)
+  return (rmse_root)
+}
+```
+## ---------------------------
+
+## Remove selected compounds
+```{r}
+removing_selected_compounds <- function(df_known_space = tibble(),
+                                        selected_compound_list){
+  
+  selected_data <- df_known_space[!(df_known_space$comID
+                                    %in% selected_compound_list$comID),]
+  return(selected_data)
+}
+```
+## ---------------------------
+
+## Random sampling
+```{r}
+random_sampling <- function(Data_unknown_space = tibble(),
+                            sampling_number = numeric()){
+  
+  random_sample_ID <- Data_unknown_space %>%
+    slice_sample(n = sampling_number, replace = FALSE)
+
+  return(c(random_sample_ID$comID))
+}
+```
+## ---------------------------
+
+## Cost-based sampling
+```{r}
+cost_sampling <- function(Data_unknown_space = tibble(),
+                            sampling_number = numeric()){
+  
+  cost_sample_ID <- Data_unknown_space %>%
+    arrange(Price) %>%
+    slice_head(n = sampling_number)
+
+  return(c(cost_sample_ID$comID))
+}
+```
+## ---------------------------
+
+## Cluster properties computation
+```{r}
+compute_cluster_properties <- function(kmeans_results,
+                                       kmeans_input_data,
+                                       plot_radius = TRUE) {
+  
+  cluster_info = tibble(closest_data_indice = character(),
+                        radius = numeric())
+  cluster_plot = list()
+  
+  for (i in 1 : dim(kmeans_results$centers)[1]) {
+    
+    if (kmeans_results$size[i] >= 2) {
+      compounds_in_cluster <- kmeans_input_data[kmeans_results$cluster == i,]
+      original_rownames <- rownames(kmeans_input_data)[kmeans_results$cluster == i]
+      distance <- sqrt(rowSums((compounds_in_cluster - kmeans_results$centers[i,])^2))
+      names(distance) <- original_rownames
+      radius_95 = quantile(distance, probs = 0.95)
+      radius_medium = median(distance)
+      radius_mean = mean(distance)
+
+      density <- density(distance, from = min(distance), to = max(distance), n = length(distance))
+  
+      if (plot_radius == TRUE) {
+        
+        ## distribution plotting
+        cluster_plot[[i]] <- ggplot(data = as.data.frame(distance), aes(x = distance)) +
+          plot_theme() +
+          ggtitle(paste0("Cluster ", i, " Item number ", nrow(compounds_in_cluster))) +
+          geom_histogram(aes(y = after_stat(density)), bins = 50) +
+          geom_density(alpha = 0.4, fill = "blue") +
+          geom_vline(xintercept = radius_95, color = "red") +
+          geom_vline(xintercept = radius_medium, color = "darkblue") +
+          geom_vline(xintercept = radius_mean, color = "brown") +
+          ylim(c(0, 0.5)) +
+          theme(axis.text.y = element_text(angle = 0))
+      }
+      cluster_info[i,1] <- names(which.min(distance))
+      cluster_info[i,2] <- radius_medium
+      
+    } else if (kmeans_results$size[i] == 1) {
+      
+      compounds_in_cluster <- kmeans_input_data[kmeans_results$cluster == i,]
+      distance <- sqrt(rowSums((compounds_in_cluster - kmeans_results$centers[i,])^2))
+      
+      cluster_info[i,1] <- rownames(kmeans_input_data[kmeans_results$cluster == i,])
+      cluster_info[i,2] <- distance
+    }
+  }
+  if (plot_radius == TRUE) {
+    print(do.call(grid.arrange, cluster_plot))
+  }
+  
+  return(cluster_info)
+}
+```
+## ---------------------------
+
+## Clustering sampling
+```{r}
+kmeans_sampling <- function(Data_unknown_space = tibble(),
+                            sampling_number = 5,
+                            plot_radius = TRUE){
+  
+  if (is.numeric(sampling_number)){
+  
+    kmeans_result <- kmeans(Data_unknown_space %>% 
+                              select_if(is.numeric) %>%
+                              select(-c("logIE", "pH.aq.", "polarity_index",
+                                        "viscosity", "surface_tension", "NH4")),
+                            centers = sampling_number, nstart = 25)
+    cluster_sample_rowname <- compute_cluster_properties(kmeans_result, 
+                                                         Data_unknown_space  %>% 
+                                                           select_if(is.numeric) %>%
+                                                           select(-c("logIE", "pH.aq.", "polarity_index",
+                                                                     "viscosity", "surface_tension", "NH4")),
+                                                         plot_radius)[,1]
+    
+    clustering_sample_ID <- Data_unknown_space[unlist(cluster_sample_rowname), ]
+    
+    return (clustering_sample_ID$comID)
+    }
+}
+```
+## ---------------------------
+
+## Uncertainty sampling
+```{r}
+uncartinty_sampling <- function(Data_known_space = tibble(),
+                                Data_unknown_space = tibble(),
+                                sampling_number = 5){
+  
+  Result_quan_interval <- rfinterval(logIE ~ .,
+                                   train_data = as.matrix(Data_known_space %>%
+                                                            select(-c("comID", "name", "SMILES", "data_type"))),
+                                   test_data = as.matrix(Data_unknown_space  %>%
+                                                           select(-c("comID", "name", "SMILES", "data_type")) %>%
+                                                           select(-logIE)),
+                                   method = "quantreg",
+                                   symmetry = TRUE,
+                                   alpha = 0.1)
+  
+  uncertainty_results <- as_tibble(Result_quan_interval$quantreg_interval) %>%
+    mutate(comID = Data_unknown_space$comID,
+           rownames = rownames(Data_unknown_space),
+           interval = upper - lower) %>%
+    arrange(desc(interval))
+  
+  return(unlist(uncertainty_results[1:sampling_number, "comID"]))
+}
+```
+## ---------------------------
+
+## Mixed sampling (mix the clustering and uncertainty)
+```{r}
+mixing_sampling <- function(Data_known_space = tibble(),
+                            Data_unknown_space = tibble(),
+                            sampling_number = 5,
+                            plot_radius = FALSE) {
+
+    if (is.numeric(sampling_number)){
+      
+      ## K-means clustering computation
+      kmeans_result <- kmeans(Data_unknown_space %>% 
+                                select_if(is.numeric) %>%
+                                select(-c("logIE", "pH.aq.", "polarity_index",
+                                          "viscosity", "surface_tension", "NH4")), 
+                              centers = sampling_number, nstart = 25)
+      
+      cluster_properties <- compute_cluster_properties(kmeans_result,
+                                                       Data_unknown_space %>%
+                                                         select_if(is.numeric) %>%
+                                                         select(-c("logIE", "pH.aq.", "polarity_index",
+                                                                   "viscosity", "surface_tension", "NH4")),
+                                                       plot_radius = FALSE)
+      
+      cluster_density <- kmeans(cluster_properties[, 2], centers = 2, nstart = 5)
+      
+      ## clustering density classification
+      if (cluster_density$centers[1] >= cluster_density$centers[2]) {
+        cluster_properties <- cluster_properties %>%
+          mutate(cluster_number = row_number(),
+                 density = case_when(cluster_density$cluster == 1 ~ "Sparse",
+                                     cluster_density$cluster == 2 ~ "Dense"))
+      } else {
+        cluster_properties <- cluster_properties %>%
+          mutate(cluster_number = row_number(),
+                 density = case_when(cluster_density$cluster == 1 ~ "Dense",
+                                     cluster_density$cluster == 2 ~ "Sparse"))
+      }
+  
+      ## uncertainty computation
+      Result_quan_interval <- rfinterval(logIE ~ .,
+                                 train_data = as.matrix(Data_known_space %>%
+                                                            select(-c("comID", "name", "SMILES", "data_type"))),
+                                 test_data = as.matrix(Data_unknown_space %>%
+                                                            select(-c("comID", "name", "SMILES", "data_type")) %>% 
+                                                         select(-logIE)),
+                                 method = "quantreg",
+                                 symmetry = TRUE,
+                                 alpha = 0.1)
+  
+      uncertainty_results <- as_tibble(Result_quan_interval$quantreg_interval) %>%
+        mutate(rownames = rownames(Data_unknown_space),
+               interval = upper - lower,
+               cluster_number = kmeans_result$cluster)
+      
+      uncertainty_results <- uncertainty_results %>%
+        left_join(cluster_properties %>% select(cluster_number, density, closest_data_indice))
+    }
+  
+  mix_sampling_rownames = list()
+  
+  for (cluster_index in uncertainty_results$cluster_number) {
+    if (cluster_properties$density[cluster_index] == "Dense"){
+      
+      mix_sampling_rownames[cluster_index] = cluster_properties$closest_data_indice[cluster_index]
+      
+    } else {
+      
+      df_cluster_index = uncertainty_results[uncertainty_results$cluster_number == cluster_index, ]
+      rowname_index = which.max(df_cluster_index$interval)
+      mix_sampling_rownames[cluster_index] = df_cluster_index[rowname_index, ]$rownames
+    }
+  }
+  
+  mix_sample_ID <- Data_unknown_space[unlist(mix_sampling_rownames), ]
+  
+  return(unlist(mix_sample_ID$comID))
+}
+```
+## ---------------------------
+
+## Anti-cluster sampling
+```{r}
+anticluster_sampling <- function(Data_unknown_space = tibble(),
+                                 sampling_number = 5){
+  
+    if (is.numeric(sampling_number)){
+      anticluster_number = ceiling(nrow(Data_unknown_space) / sampling_number)
+      
+      if (anticluster_number == 1) {
+        
+        anticluster_sample_rowname <- Data_unknown_space %>% slice_sample(n = sampling_number, replace = FALSE)
+        
+      } else {
+        
+        index_anticlus <- anticlustering(x = Data_unknown_space  %>% 
+                                                  select_if(is.numeric) %>% 
+                                                  select(-c("logIE", "pH.aq.", "polarity_index",
+                                                         "viscosity", "surface_tension", "NH4")),
+                                         K = anticluster_number)
+      
+        anticluster_sample_rowname <- Data_unknown_space[index_anticlus == 1, ]
+      }
+    
+      return (anticluster_sample_rowname$comID)
+    }
+}
+```
+## ---------------------------
+
+## Plot theme
+```{r}
+plot_theme <- function() {
+  theme_minimal() %+replace%
+    theme(axis.title  = element_text(size = 10),
+          axis.text = element_text(size = 10),
+          axis.line = element_line(colour = "black", linewidth = 1),
+          axis.ticks = element_line(colour = "black", linewidth = 1),
+          panel.background = element_blank(),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          legend.title = element_blank(),
+          legend.key = element_blank(),
+          legend.text = element_text(size = 10),
+          legend.position = "bottom"
+          )
+}
+```
+## ---------------------------
+
+## Active learning workflow
+```{r}
+active_learning <- function(Data_known_space = tibble(), 
+                            Data_unknown_space = tibble(),
+                            sampling_number = numeric(),
+                            columns_removed_from_cleaning = list(),
+                            columns_removed_from_scaling = list(),
+                            iteration_number = numeric(),
+                            reproduce_index = numeric(),
+                            algo = c("Random", "Clustering", "Uncertainty", "Anticlustering", "Mix"),
+                            saving_root){
+  
+  iteration_result = tibble(info = c("algo", "Iteration_number", "error", 1: sampling_number))
+  return_list = list()
+    
+  ##--------Train test splitting before active learning
+  set.seed(reproduce_index * 100 + 1)
+  
+  Data_unknown_space_test <- Data_unknown_space %>% 
+    group_by(data_type) %>% 
+    sample_frac(.2) %>% 
+    ungroup()
+  
+  Data_unknown_space_train <- Data_unknown_space[!(Data_unknown_space$comID %in%
+                                                          Data_unknown_space_test$comID), ]
+  
+  prediction_result = tibble(Data_unknown_space_test %>% select(comID, logIE, data_type))
+  
+  for (iteration_index in 1 : iteration_number) {
+    
+    ##--------modify the sampling number if there is no enough sample to collect
+    if (sampling_number <= nrow(Data_unknown_space_train)) {
+      
+      supplement_list <- c()
+      writeLines(paste0("Algo: ", algo, ", Sampling number: ", sampling_number, ", Run: ", reproduce_index, ", Iteration: ", iteration_index))
+      
+    } else if (nrow(Data_unknown_space_train) == 0) {
+      
+      writeLines("No points to select.")
+      break
+      
+    } else if (sampling_number >= nrow(Data_unknown_space_train)) {
+      
+      N <- sampling_number - nrow(Data_unknown_space_train)
+      supplement_list <- as.list(rep(-1, N))
+      sampling_number <- nrow(Data_unknown_space_train)
+      
+      writeLines(paste0("Not enough points to select, the new sampling number is ", nrow(Data_unknown_space_train), "."))
+      writeLines(paste0("Algo: ", algo, ", Sampling number: ", sampling_number, ", Run: ", reproduce_index, ", Iteration: ", iteration_index))
+    } 
+    
+    ##--------sampling number = 1 is not allowed in Mix and Anticlustering sampling
+    if (sampling_number == 1 & algo == "Mix"){
+      writeLines(paste0("Only one cluster is generated. The algorithm can not define the sparsity of the cluster."))
+      break
+    } else if (sampling_number == 1 & algo == "Anticlustering") {
+      writeLines(paste0("Sampling one compound each time is meaningless for anticlustering."))
+      break
+    }
+    
+    ##--------only in the first iteration that we need to do the clean before AL.
+    if (iteration_index == 1){
+      
+      ##--------Clean descriptors
+      Data_known_space_cleaned <- cleaning_combine(Data_known_space, columns_removed_from_cleaning)
+      
+      Data_unknown_space_train_it <- Data_unknown_space_train[, colnames(Data_known_space_cleaned)]
+      
+      ##--------scale the training set
+      scaling_result <- scaling_combine(Data_known_space_cleaned, columns_removed_from_scaling)
+      
+      Data_known_space_it <- scaling_result[[1]]
+      
+      Data_unknown_space_train_it <- scaling_combine(Data_unknown_space_train_it,
+                                                     columns_removed_from_scaling,
+                                                     center = scaling_result[[2]],
+                                                     scale = scaling_result[[3]])[[1]]
+    }
+    
+    supplement_list_anticlus <- c()
+    supplement_list_cost <- c()
+    
+    set.seed(reproduce_index * 100 + iteration_index)
+    
+      ##--------random sampling
+    if (algo == "Random"){
+      sampling_rownames <- random_sampling(Data_unknown_space_train_it,
+                                           sampling_number)
+      ##--------clustering sampling
+    } else if (algo == "Clustering"){
+      
+      if (sampling_number == nrow(Data_unknown_space_train_it)) {
+        
+        random_sample_ID <- Data_unknown_space_train_it %>%
+          slice_sample(n = sampling_number, replace = FALSE)
+        sampling_rownames <- random_sample_ID$comID
+        
+      } else {
+        
+        sampling_rownames <- kmeans_sampling(Data_unknown_space_train_it,
+                                             sampling_number,
+                                             plot_radius = FALSE)
+      }
+      
+      ##--------uncertainty sampling
+    } else if (algo == "Uncertainty"){
+      sampling_rownames <- uncartinty_sampling(Data_known_space_it,
+                                               Data_unknown_space_train_it,
+                                               sampling_number)
+      ##--------anticlustering sampling
+    } else if (algo == "Anticlustering"){
+      sampling_rownames <- anticluster_sampling(Data_unknown_space_train_it,
+                                                sampling_number)
+      N_anticlus <- sampling_number - length(sampling_rownames)
+      supplement_list_anticlus <- as.list(rep(-1, N_anticlus))
+      
+      ##--------mixing sampling
+    } else if (algo == "Mix") {
+      
+      if (sampling_number == nrow(Data_unknown_space_train_it)) {
+        
+        mix_sample_ID <- Data_unknown_space_train_it %>%
+          slice_sample(n = sampling_number, replace = FALSE)
+        sampling_rownames <- mix_sample_ID$comID
+        
+      } else {
+        sampling_rownames <- mixing_sampling(Data_known_space_it,
+                                             Data_unknown_space_train_it,
+                                             sampling_number,
+                                             plot_radius = FALSE)
+        }
+    } else if (algo == "Cost") {
+
+      if (nrow(Data_unknown_space_train_it %>% filter(Price != 99999)) < sampling_number) {
+        
+        N_cost <- sampling_number - nrow(Data_unknown_space_train_it %>% filter(Price != 99999))
+        supplement_list_cost <- as.list(rep(-1, N_cost))
+        
+        sampling_number = nrow(Data_unknown_space_train_it %>% filter(Price != 99999))
+        
+        if (sampling_number == 0) {
+          writeLines("No available chemicals.") 
+          break
+        } else {
+          writeLines(paste0("Sampling number is changed to ", sampling_number))
+          sampling_rownames <- cost_sampling(Data_unknown_space_train_it,
+                                             sampling_number)
+        }
+      } else {
+        sampling_rownames <- cost_sampling(Data_unknown_space_train_it,
+                                           sampling_number)
+      }
+    }
+    
+    ##--------take AL samples
+    sampling_result <- Data_unknown_space_train[Data_unknown_space_train$comID %in% sampling_rownames, ]
+    # sampling_result_it <- Data_unknown_space_train_it[Data_unknown_space_train_it$comID %in% sampling_rownames, ]
+    # 
+    # ##--------update the iteration training set and chemical space
+    # Data_unknown_space_train_it <- removing_selected_compounds(Data_unknown_space_train_it, sampling_result_it)
+    # Data_known_space_it = rbind(Data_known_space_it, sampling_result_it)
+    
+    ##--------update the original training set and chemical space
+    Data_unknown_space_train <- removing_selected_compounds(Data_unknown_space_train, sampling_result)
+    Data_known_space = rbind(Data_known_space, sampling_result)
+    
+    ##--------reclean the training set
+    Data_known_space_cleaned <- cleaning_combine(Data_known_space, columns_removed_from_cleaning)
+    Data_unknown_space_train_it <- Data_unknown_space_train[, colnames(Data_known_space_cleaned)]
+    Data_unknown_space_test_it <- Data_unknown_space_test[, colnames(Data_known_space_cleaned)]
+    
+    ##--------rescale the training set
+    scaling_result <- scaling_combine(Data_known_space_cleaned, columns_removed_from_scaling)
+    Data_known_space_it <- scaling_result[[1]]
+    Data_unknown_space_train_it <- scaling_combine(Data_unknown_space_train_it,
+                                                   columns_removed_from_scaling,
+                                                   center = scaling_result[[2]],
+                                                   scale = scaling_result[[3]])[[1]]
+    Data_unknown_space_test_it <- scaling_combine(Data_unknown_space_test_it,
+                                                   columns_removed_from_scaling,
+                                                   center = scaling_result[[2]],
+                                                   scale = scaling_result[[3]])[[1]]
+
+    ##--------train model for the new training set
+    Data_known_space_it <- Data_known_space_it[order(Data_known_space_it$comID), ]
+    New_prediction <- logIE_prediction(Data_known_space_it,
+                                       Data_unknown_space_test_it,
+                                       reproduce_index, iteration_index, algo, saving_root)
+    
+    ##--------obtain prediction
+    prediction_result <- prediction_result %>%
+      mutate(!!sym(paste0(algo, "_Iteration_", iteration_index)) := New_prediction)
+    Prediction_error <- error_computation_RMSE_pool(Data_unknown_space_test_it, New_prediction)
+    
+    ##--------save sampling information
+    sampling_info_list <- c(algo, iteration_index, Prediction_error, t(unlist(c(as.list(sampling_result$comID),
+                                                                                supplement_list,
+                                                                                supplement_list_anticlus,
+                                                                                supplement_list_cost))))
+    
+    iteration_result <- iteration_result %>%
+      mutate(!!sym(paste0(algo, "_Iteration_", iteration_index)) := sampling_info_list)
+  }
+  return_list[[1]] = t(iteration_result)
+  return_list[[2]] = prediction_result
+  return(return_list)
+}
+```
+## ---------------------------
